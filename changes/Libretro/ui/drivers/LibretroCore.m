@@ -8,6 +8,7 @@
 
 #import "LibretroCore.h"
 #include "../../pkg/apple/ManicEMU/AzaharRoomABI.h"
+#include "../../pkg/apple/ManicEMU/AzaharCompatABI.h"
 #import "LibretroShaderPreview.h"
 #include <stdint.h>
 #include <stddef.h>
@@ -1167,7 +1168,6 @@ static void libretroLogCallback(enum retro_log_level level, const char *fmt, va_
 #pragma mark - Azahar
 
 /* ABI layout must match azahar core (libretro_azahar.h); loaded via dylib_proc only. */
-#include "../../pkg/apple/ManicEMU/AzaharCompatABI.h"
 
 // Static storage for the keyboard callback
 static void (^_Nullable s_azahar_keyboard_callback)(AzaharKeyboardConfig * _Nullable config) = nil;

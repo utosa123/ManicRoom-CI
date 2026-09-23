@@ -61,5 +61,6 @@ else:
     if MODE!='baseline':
         patch(dst,'ManicEMU'); patch(dst/'Dependencies/Libretro','Libretro')
         patch(dst,'B-ui-message-only')
+        patch(dst/'Dependencies/Libretro','Libretro-header-scope')
     inventory(dst,'ManicEMU'); inventory(dst/'Dependencies/Libretro','Libretro')
 print('Prepared fixed sources:', MODE, 'See logs/prepare.log')

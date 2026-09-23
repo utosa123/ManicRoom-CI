@@ -40,8 +40,10 @@ cmp "$resolved" "$out/Package.resolved.before"
 if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
   python3 "$scripts/../../../../ci/trust-pinned-rswift.py" "$resolved" "$out/packages" "$out/rswift-trust.json"
 fi
+# Let the iOS destination select the device SDK while plugins build for the host.
+# R.swift #805: forcing -sdk can leave RswiftResources available only for macOS.
 xcodebuild -project "$project" -scheme ManicEmuSideload -configuration SideloadRelease \
-  -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$out/DerivedData" \
+  -destination 'generic/platform=iOS' -derivedDataPath "$out/DerivedData" \
   -clonedSourcePackagesDirPath "$out/packages" -disableAutomaticPackageResolution \
   -archivePath "$out/ManicRoom.xcarchive" APP_BUNDLE_IDENTIFIER="$bundle" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' CODE_SIGN_ENTITLEMENTS='' \

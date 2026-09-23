@@ -13,7 +13,7 @@ final class AzaharRoomView: BaseView {
     private let leave = UIButton(type: .system)
     private var timer: Timer?
     private var hideCompletion: (() -> Void)?
-    private var hidden = false
+    private var didFinishHiding = false
     private var lastStatus: NSDictionary?
 
     required init?(parameters: Any...) {
@@ -141,7 +141,7 @@ final class AzaharRoomView: BaseView {
         refresh()
     }
 
-    private static func errorText(_ error: Int32) -> String {
+    private static func errorText(_ error: Int) -> String {
         switch error {
         case 1: return "ホストまたはネットワークとの接続が切れました"
         case 2: return "ホストから退出させられました"
@@ -166,8 +166,8 @@ extension AzaharRoomView: ShowableView {
         Self.show()?.hideCompletion = hideCompletion
     }
     func didHide() {
-        guard !hidden else { return }
-        hidden = true
+        guard !didFinishHiding else { return }
+        didFinishHiding = true
         timer?.invalidate()
         timer = nil
         password.text = ""

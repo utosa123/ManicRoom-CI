@@ -1,0 +1,14 @@
+diff --git a/Scripts/VerifyLFS.sh b/Scripts/VerifyLFS.sh
+--- a/Scripts/VerifyLFS.sh
++++ b/Scripts/VerifyLFS.sh
+@@ -30,7 +30,9 @@ collect_lfs_issues() {
+         elif is_lfs_pointer "$file_path"; then
+             stale_files+=("$file_path")
+         fi
+-    done < <(git lfs ls-files -n 2>/dev/null)
++    # C staging only: the unsigned replacement has no original signature.
++    # All original LFS assets were verified before this separate copy was made.
++    done < <(git lfs ls-files -n 2>/dev/null | grep -vFx 'Cores/azahar.libretro.framework/_CodeSignature/CodeResources')
+ }
+ 
+ report_issues() {

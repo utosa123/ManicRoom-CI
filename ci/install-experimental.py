@@ -19,11 +19,15 @@ def ignore(directory,names):
     return ['azahar.libretro.framework'] if Path(directory)==source/'Cores' else []
 shutil.copytree(source,stage,ignore=ignore,symlinks=True)
 shutil.copytree(candidate,stage/'Cores/azahar.libretro.framework')
-# The unsigned candidate has no original signature. Remove only that obsolete
-# entry from the copied index so VerifyLFS still checks every remaining asset.
-# Never copy a signature belonging to another binary or alter the source index.
+# The unsigned candidate has no original signature. LFS also enumerates HEAD,
+# so removing an index entry is insufficient. Apply a staging-only exception
+# for this one obsolete signature, after validating all original LFS assets.
 signature='Cores/azahar.libretro.framework/_CodeSignature/CodeResources'
 assert not (stage/signature).exists()
-subprocess.run(['git','-C',str(stage),'update-index','--force-remove','--',signature],check=True)
+staging_patch=root/'patches/Manic-C-unsigned-signature.patch'
+subprocess.run(['git','-C',str(stage),'apply','--check',str(staging_patch)],check=True)
+subprocess.run(['git','-C',str(stage),'apply',str(staging_patch)],check=True)
+subprocess.run(['bash',str(stage/'Scripts/VerifyLFS.sh')],check=True)
 assert manifest(original)==before
-(root/'logs/core-replacement.json').write_text(json.dumps({'original_unchanged':before,'candidate':manifest(candidate),'staging':str(stage)},indent=2))
+(root/'logs/core-replacement.json').write_text(json.dumps({'original_unchanged':before,'candidate':manifest(candidate),'staging':str(stage),
+    'staging_only_lfs_exception':signature,'staging_patch_sha256':hashlib.sha256(staging_patch.read_bytes()).hexdigest()},indent=2))

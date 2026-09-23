@@ -1,0 +1,42 @@
+--- a/ManicEmu/ManicEmu.xcodeproj/project.pbxproj
++++ b/ManicEmu/ManicEmu.xcodeproj/project.pbxproj
+@@ -16154,7 +16154,7 @@
+ 					"@executable_path/Frameworks",
+ 					"@executable_path/../../Frameworks",
+ 				);
+-				PRODUCT_BUNDLE_IDENTIFIER = com.aoshuang.manicemu.JITEnabler;
++				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).JITEnabler";
+ 				PRODUCT_NAME = JITEnabler;
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SKIP_INSTALL = YES;
+@@ -16179,7 +16179,7 @@
+ 					"@executable_path/Frameworks",
+ 					"@executable_path/../../Frameworks",
+ 				);
+-				PRODUCT_BUNDLE_IDENTIFIER = com.aoshuang.manicemu.JITEnabler;
++				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).JITEnabler";
+ 				PRODUCT_NAME = JITEnabler;
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SKIP_INSTALL = YES;
+@@ -16204,7 +16204,7 @@
+ 					"@executable_path/Frameworks",
+ 					"@executable_path/../../Frameworks",
+ 				);
+-				PRODUCT_BUNDLE_IDENTIFIER = com.aoshuang.manicemu.JITEnabler;
++				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).JITEnabler";
+ 				PRODUCT_NAME = JITEnabler;
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SKIP_INSTALL = YES;
+--- a/ManicEmu/ManicEmu/Resources/JITEnablerExtension.xcconfig
++++ b/ManicEmu/ManicEmu/Resources/JITEnablerExtension.xcconfig
+@@ -5,7 +5,9 @@
+ // SPDX-License-Identifier: AGPL-3.0-or-later
+ 
+ PRODUCT_NAME = JITEnabler
+-PRODUCT_BUNDLE_IDENTIFIER = com.aoshuang.manicemu.JITEnabler
++// Preserve the original ID by default; CI supplies the isolated app ID.
++APP_BUNDLE_IDENTIFIER = com.aoshuang.manicemu
++PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER).JITEnabler
+ PRODUCT_MODULE_NAME = JITEnabler
+ IPHONEOS_DEPLOYMENT_TARGET = 17.4
+ TARGETED_DEVICE_FAMILY = 1,2

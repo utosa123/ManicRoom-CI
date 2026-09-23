@@ -87,6 +87,7 @@ jobs:
             logs/
             app-out/*.log
             app-out/*.txt
+            app-out/*.json
             app-out/*.patch
             app-out/*resolved*
             app-out/*SUMS

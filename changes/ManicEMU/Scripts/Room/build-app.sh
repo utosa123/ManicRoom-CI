@@ -35,6 +35,11 @@ cp "$resolved" "$out/Package.resolved.before"
 xcodebuild -resolvePackageDependencies -project "$project" -scheme ManicEmuSideload \
   -onlyUsePackageVersionsFromResolvedFile -clonedSourcePackagesDirPath "$out/packages" 2>&1 | tee "$out/packages.log"
 cmp "$resolved" "$out/Package.resolved.before"
+# A fresh CI runner has no interactive approval for the pinned resource plugin.
+# Approve its exact lockfile revision; do not disable plugin validation globally.
+if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+  python3 "$scripts/../../../../ci/trust-pinned-rswift.py" "$resolved" "$out/packages" "$out/rswift-trust.json"
+fi
 xcodebuild -project "$project" -scheme ManicEmuSideload -configuration SideloadRelease \
   -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$out/DerivedData" \
   -clonedSourcePackagesDirPath "$out/packages" -disableAutomaticPackageResolution \

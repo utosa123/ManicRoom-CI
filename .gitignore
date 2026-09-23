@@ -1,0 +1,8 @@
+.venv/
+src/
+stage-C/
+core-out/
+app-out/
+test-build/
+__pycache__/
+*.pyc

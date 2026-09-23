@@ -1,0 +1,480 @@
+diff --git a/configuration.c b/configuration.c
+--- a/configuration.c
++++ b/configuration.c
+@@ -5027,13 +5027,15 @@
+    return bind_user_prefix[user];
+ }
+ 
+-static const char *g_custom_save_dir = NULL;
++/* Own the bytes: callers commonly pass temporary NSString.UTF8String storage. */
++static char g_custom_save_dir[PATH_MAX_LENGTH];
+ void set_custom_save_dir(const char *dir) {
+-   g_custom_save_dir = dir;
++   if (!dir || strlcpy(g_custom_save_dir, dir, sizeof(g_custom_save_dir)) >= sizeof(g_custom_save_dir))
++      g_custom_save_dir[0] = '\0';
+ }
+ 
+ const char* get_custom_save_dir(void) {
+-   return g_custom_save_dir;
++   return g_custom_save_dir[0] ? g_custom_save_dir : NULL;
+ }
+ 
+ static const char *g_custom_save_ext = NULL;
+diff --git a/pkg/apple/ManicEMU/AzaharCompatABI.h b/pkg/apple/ManicEMU/AzaharCompatABI.h
+new file mode 100644
+--- /dev/null
++++ b/pkg/apple/ManicEMU/AzaharCompatABI.h
+@@ -0,0 +1,31 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++#include <stdbool.h>
++#include <stdint.h>
++#include <stddef.h>
++// Experimental Manic adapter contract 1; NOT retro_azahar_extension_version.
++struct retro_azahar_keyboard_config_local {
++    int button_config, accept_mode;
++    bool multiline_mode;
++    int max_text_length, max_digits;
++    const char* hint_text;
++    const char** button_text;
++    int button_text_count;
++    bool prevent_digit, prevent_at, prevent_percent, prevent_backslash;
++    bool prevent_profanity, enable_callback;
++};
++#if defined(__cplusplus)
++#define AZ_ASSERT static_assert
++#else
++#define AZ_ASSERT _Static_assert
++#endif
++AZ_ASSERT(sizeof(int)==4 && sizeof(bool)==1 && sizeof(void*)==8, "64-bit adapter ABI only");
++AZ_ASSERT(sizeof(struct retro_azahar_keyboard_config_local)==56, "keyboard sizeof");
++#define AZ_OFFSET(f,n) AZ_ASSERT(offsetof(struct retro_azahar_keyboard_config_local,f)==n, #f)
++AZ_OFFSET(button_config,0); AZ_OFFSET(accept_mode,4); AZ_OFFSET(multiline_mode,8);
++AZ_OFFSET(max_text_length,12); AZ_OFFSET(max_digits,16); AZ_OFFSET(hint_text,24);
++AZ_OFFSET(button_text,32); AZ_OFFSET(button_text_count,40); AZ_OFFSET(prevent_digit,44);
++AZ_OFFSET(prevent_at,45); AZ_OFFSET(prevent_percent,46); AZ_OFFSET(prevent_backslash,47);
++AZ_OFFSET(prevent_profanity,48); AZ_OFFSET(enable_callback,49);
++#undef AZ_OFFSET
++#undef AZ_ASSERT
+diff --git a/pkg/apple/ManicEMU/AzaharRoomABI.h b/pkg/apple/ManicEMU/AzaharRoomABI.h
+new file mode 100644
+--- /dev/null
++++ b/pkg/apple/ManicEMU/AzaharRoomABI.h
+@@ -0,0 +1,38 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++#include <stdint.h>
++#ifdef __cplusplus
++extern "C" {
++#endif
++#if defined(_WIN32)
++#define AZ_ROOM_EXPORT __declspec(dllexport)
++#else
++#define AZ_ROOM_EXPORT __attribute__((visibility("default")))
++#endif
++
++/* ABI 1. All strings are UTF-8, NUL terminated and copied before join returns.
++ * Caller owns snapshot storage; no pointers or callbacks cross this boundary.
++ * Calls must not overlap dlclose. Query functions do not initialize the core.
++ * Join: 0 = accepted, NOT joined; 1 = invalid input; 2 = not ready; 3 = busy;
++ * -1 = internal error. Only snapshot.state == 3 means joined.
++ * IPv4 literals only. Nicknames: [A-Za-z0-9._ -]{4,20}. Password <=128 bytes.
++ * Snapshot errors 1..13 map to RoomMember::Error + 1; 100 = internal,
++ * 101 = handshake timeout. State 4 lasts until socket cleanup completes. */
++enum { AZ_ROOM_OFFLINE = 0, AZ_ROOM_IDLE = 1, AZ_ROOM_JOINING = 2,
++       AZ_ROOM_JOINED = 3, AZ_ROOM_LEAVING = 4 };
++typedef struct az_room_snapshot {
++    uint32_t state;
++    uint32_t error;
++    uint32_t protocol;
++    uint32_t default_port;
++    uint32_t member_count;
++    char members[254][21];
++} az_room_snapshot;
++AZ_ROOM_EXPORT uint32_t retro_azahar_room_api_version(void);
++AZ_ROOM_EXPORT int32_t retro_azahar_room_snapshot(az_room_snapshot* out, uint32_t size);
++AZ_ROOM_EXPORT int32_t retro_azahar_room_join(const char* ip, uint32_t port,
++                                           const char* nickname, const char* password);
++AZ_ROOM_EXPORT int32_t retro_azahar_room_leave(void);
++#ifdef __cplusplus
++}
++#endif
+diff --git a/ui/drivers/LibretroCore.m b/ui/drivers/LibretroCore.m
+--- a/ui/drivers/LibretroCore.m
++++ b/ui/drivers/LibretroCore.m
+@@ -7,6 +7,7 @@
+ //
+ 
+ #import "LibretroCore.h"
++#include "../../pkg/apple/ManicEMU/AzaharRoomABI.h"
+ #import "LibretroShaderPreview.h"
+ #include <stdint.h>
+ #include <stddef.h>
+@@ -148,6 +149,10 @@
+     [[NSRunLoop mainRunLoop] addTimer:s_netplay_task_pump forMode:NSRunLoopCommonModes];
+ }
+ 
++static BOOL ManicRoomExperiment(void) {
++    return [[[NSBundle mainBundle] objectForInfoDictionaryKey:@"ManicRoomBuildMode"] isEqual:@"experimental"];
++}
++
+ @implementation LibretroCore
+ 
+ + (instancetype)sharedInstance {
+@@ -156,6 +161,8 @@
+     dispatch_once(&onceToken, ^{
+         instance = [[self alloc] init];
+         instance.retroArch_iOS = [RetroArch_iOS new];
++        [[NSNotificationCenter defaultCenter] addObserver:instance
++            selector:@selector(azaharRoomDidEnterBackground:) name:UIApplicationDidEnterBackgroundNotification object:nil];
+     });
+     return instance;
+ }
+@@ -179,6 +186,15 @@
+ }
+ 
+ - (UIViewController *)startWithCustomSaveDir:(NSString *_Nullable)customSaveDir {
++    if (![NSThread isMainThread]) { NSLog(@"Libretro start requires main thread"); return nil; }
++    if (ManicRoomExperiment()) {
++        NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
++        customSaveDir = [documents stringByAppendingPathComponent:@"RoomExperiment-v1"];
++        NSError *error = nil;
++        if (![[NSFileManager defaultManager] createDirectoryAtPath:customSaveDir withIntermediateDirectories:YES attributes:nil error:&error]) {
++            NSLog(@"Cannot create isolated Room save directory: %@", error); return nil;
++        }
++    }
+     self.isRunning = YES;
+     [[self getRetroArch] startWithCustomSaveDir:customSaveDir];
+     cheevos_event_register_callback(cheevosDidTrigger);
+@@ -189,6 +205,7 @@
+ }
+ 
+ - (void)pause {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self pause]; }); return; }
+     [[self getRetroArch] pause];
+     if (netplay_is_hosting())
+         netplay_start_task_pump_if_paused(YES);
+@@ -199,6 +216,7 @@
+ }
+ 
+ - (void)resume {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self resume]; }); return; }
+     s_netplay_advertise_pump = NO;
+     if (!s_netplay_host_list_completion && !s_netplay_lan_host_list_completion)
+         netplay_stop_task_pump();
+@@ -206,6 +224,8 @@
+ }
+ 
+ - (void)stop {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self stop]; }); return; }
++    [self leaveAzaharRoom];
+     self.isRunning = NO;
+     cheevos_event_register_callback(NULL);
+     netplay_event_register_callback(NULL);
+@@ -237,14 +257,20 @@
+ }
+ 
+ - (BOOL)saveState:(void(^ _Nullable)(NSString *_Nullable path))completion {
++    if (![NSThread isMainThread]) { NSLog(@"Libretro synchronous operation requires main thread"); return NO; }
++    if (ManicRoomExperiment() || [self azaharRoomActive]) return NO;
+     return [[self getRetroArch] saveState:completion];
+ }
+ 
+ - (BOOL)loadState:(NSString *_Nonnull)path {
++    if (![NSThread isMainThread]) { NSLog(@"Libretro synchronous operation requires main thread"); return NO; }
++    if (ManicRoomExperiment() || [self azaharRoomActive]) return NO;
+     return [[self getRetroArch] loadState:path];
+ }
+ 
+ - (void)fastForward:(float)rate {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self fastForward:rate]; }); return; }
++    if (rate != 0 && (ManicRoomExperiment() || [self azaharRoomActive])) return;
+     [[self getRetroArch] fastForward:rate];
+ }
+ 
+@@ -253,6 +279,8 @@
+            bufferSizeMB:(unsigned)bufferSizeMB
+        bufferSizeStepMB:(unsigned)bufferSizeStepMB
+                    mute:(BOOL)mute {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self setRewindEnable:enable granularity:granularity bufferSizeMB:bufferSizeMB bufferSizeStepMB:bufferSizeStepMB mute:mute]; }); return; }
++    if (enable && (ManicRoomExperiment() || [self azaharRoomActive])) return;
+     [[self getRetroArch] setRewindEnable:enable
+                              granularity:granularity
+                             bufferSizeMB:bufferSizeMB
+@@ -265,22 +293,31 @@
+ }
+ 
+ - (void)setRewind:(BOOL)rewinding {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self setRewind:rewinding]; }); return; }
++    if (rewinding && (ManicRoomExperiment() || [self azaharRoomActive])) return;
+     [[self getRetroArch] setRewind:rewinding];
+ }
+ 
+ - (void)setSlowmotionEnable:(BOOL)enable ratio:(float)ratio {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self setSlowmotionEnable:enable ratio:ratio]; }); return; }
++    if (enable && (ManicRoomExperiment() || [self azaharRoomActive])) return;
+     [[self getRetroArch] setSlowmotionEnable:enable ratio:ratio];
+ }
+ 
+ - (void)reload {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self reload]; }); return; }
++    if (YES && [self azaharRoomActive]) return;
+     [[self getRetroArch] reload];
+ }
+ 
+ - (void)reloadByKeepState:(BOOL)keepState {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self reloadByKeepState:keepState]; }); return; }
++    if (YES && [self azaharRoomActive]) return;
+     [[self getRetroArch] reloadByKeepState:keepState];
+ }
+ 
+ - (BOOL)loadGame:(NSString *_Nonnull)gamePath corePath:(NSString *_Nonnull)corePath completion:(void(^ _Nullable)(NSDictionary *_Nullable))completion {
++    if (![NSThread isMainThread]) { NSLog(@"Libretro synchronous operation requires main thread"); return NO; }
+     if (!LibretroPathLooksLikeEKA2L1(corePath)) {
+         LibretroEKA2L1ShutdownManagement();
+     }
+@@ -288,6 +325,7 @@
+ }
+ 
+ - (void)loadCoreWithoutContent:(NSString *_Nonnull)corePath {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self loadCoreWithoutContent:corePath]; }); return; }
+     if (!LibretroPathLooksLikeEKA2L1(corePath)) {
+         LibretroEKA2L1ShutdownManagement();
+     }
+@@ -295,6 +333,7 @@
+ }
+ 
+ - (void)loadCoreWithoutRunning:(NSString *_Nonnull)corePath {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self loadCoreWithoutRunning:corePath]; }); return; }
+     if (!LibretroPathLooksLikeEKA2L1(corePath)) {
+         LibretroEKA2L1ShutdownManagement();
+     }
+@@ -1112,10 +1151,12 @@
+ }
+ 
+ - (void)loadAmiibo:(NSString *_Nonnull)path {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self loadAmiibo:path]; }); return; }
+     [[self getRetroArch] loadAmiibo:path];
+ }
+ 
+ - (BOOL)isSearchingAmiibo {
++    if (![NSThread isMainThread]) { NSLog(@"Libretro synchronous operation requires main thread"); return NO; }
+     return [[self getRetroArch] isSearchingAmiibo];
+ }
+ 
+@@ -1126,35 +1167,26 @@
+ #pragma mark - Azahar
+ 
+ /* ABI layout must match azahar core (libretro_azahar.h); loaded via dylib_proc only. */
+-struct retro_azahar_keyboard_config_local {
+-    int button_config;
+-    int accept_mode;
+-    bool multiline_mode;
+-    int max_text_length;
+-    int max_digits;
+-    const char* _Nullable hint_text;
+-    const char* _Nonnull* _Nullable button_text;
+-    int button_text_count;
+-    bool prevent_digit;
+-    bool prevent_at;
+-    bool prevent_percent;
+-    bool prevent_backslash;
+-    bool prevent_profanity;
+-    bool enable_callback;
+-};
++#include "../../pkg/apple/ManicEMU/AzaharCompatABI.h"
+ 
+ // Static storage for the keyboard callback
+ static void (^_Nullable s_azahar_keyboard_callback)(AzaharKeyboardConfig * _Nullable config) = nil;
++static NSUInteger s_azahar_keyboard_generation = 0;
+ static AzaharButtonConfig s_azahar_last_button_config = AzaharButtonConfigSingle;
+ 
+ // C callback that will be called by the Azahar core (often off the main thread).
+ static void azahar_keyboard_request_callback(
+                                              const struct retro_azahar_keyboard_config_local* _Nullable config) {
+-    if (!s_azahar_keyboard_callback || !config) {
+-        return;
+-    }
+-    
+-    s_azahar_last_button_config = (AzaharButtonConfig)config->button_config;
++    if (!config) return;
++    __block void (^callback)(AzaharKeyboardConfig *);
++    __block NSUInteger generation;
++    @synchronized ([LibretroCore class]) {
++        callback = s_azahar_keyboard_callback;
++        generation = s_azahar_keyboard_generation;
++    }
++    if (!callback) return;
++    
++
+     
+     AzaharKeyboardConfig *objcConfig = [[AzaharKeyboardConfig alloc] init];
+     objcConfig.buttonConfig = (AzaharButtonConfig)config->button_config;
+@@ -1185,8 +1217,11 @@
+     objcConfig.preventProfanity = config->prevent_profanity;
+     objcConfig.enableCallback = config->enable_callback;
+     
+-    void (^callback)(AzaharKeyboardConfig *) = s_azahar_keyboard_callback;
+     dispatch_async(dispatch_get_main_queue(), ^{
++        @synchronized ([LibretroCore class]) {
++            if (generation != s_azahar_keyboard_generation) return;
++        }
++        s_azahar_last_button_config = objcConfig.buttonConfig;
+         if (callback) {
+             callback(objcConfig);
+         }
+@@ -1194,13 +1229,18 @@
+ }
+ 
+ - (void)registerAzaharKeyboard:(void(^ _Nullable)(AzaharKeyboardConfig *_Nonnull config))callback {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self registerAzaharKeyboard:callback]; }); return; }
+ #ifdef HAVE_DYNAMIC
++    @synchronized ([LibretroCore class]) {
++        s_azahar_keyboard_callback = [callback copy];
++        ++s_azahar_keyboard_generation;
++    }
++
+     runloop_state_t *runloop_st = runloop_state_get_ptr();
+     if (!runloop_st || !runloop_st->lib_handle) {
+         return;
+     }
+     
+-    s_azahar_keyboard_callback = [callback copy];
+     if (!callback) {
+         s_azahar_last_button_config = AzaharButtonConfigSingle;
+     }
+@@ -1221,7 +1261,12 @@
+ #endif
+ }
+ 
++- (NSUInteger)azaharKeyboardGeneration {
++    @synchronized ([LibretroCore class]) { return s_azahar_keyboard_generation; }
++}
++
+ - (void)inputAzaharKeyboard:(NSString *_Nullable)text buttonType:(AzaharButtonType)buttonType {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self inputAzaharKeyboard:text buttonType:buttonType]; }); return; }
+ #ifdef HAVE_DYNAMIC
+     runloop_state_t *runloop_st = runloop_state_get_ptr();
+     if (!runloop_st || !runloop_st->lib_handle) {
+@@ -1269,7 +1314,94 @@
+ #endif
+ }
+ 
++// No dlopen and no separately linked Azahar: this is the emulating instance.
++static dylib_t active_room_core(void) {
++#if !TARGET_IPHONE_SIMULATOR
++    runloop_state_t *runloop = runloop_state_get_ptr();
++    if (!runloop || !runloop->lib_handle) return NULL;
++    uint32_t (*version)(void) = (void *)dylib_proc(runloop->lib_handle, "retro_azahar_room_api_version");
++    if (version && version() == 1) return runloop->lib_handle;
++#endif
++    return NULL;
++}
++
++- (NSDictionary<NSString *, id> *)azaharRoomStatus {
++    if (![NSThread isMainThread]) return @{ @"supported": @NO };
++    dylib_t lib = active_room_core();
++    if (!lib) return @{ @"supported": @NO };
++    int32_t (*read)(az_room_snapshot *, uint32_t) = (void *)dylib_proc(lib, "retro_azahar_room_snapshot");
++    az_room_snapshot state = {0};
++    if (!read || read(&state, sizeof(state)) != 0) return @{ @"supported": @NO };
++    NSMutableArray *names = [NSMutableArray array];
++    for (uint32_t i = 0; i < MIN(state.member_count, 254); ++i) {
++        state.members[i][20] = 0;
++        NSString *name = [NSString stringWithUTF8String:state.members[i]];
++        if (name) [names addObject:name];
++    }
++    // Deliberately log numeric state/error only, never endpoint, identity or secret.
++    static uint32_t lastState = UINT32_MAX, lastError = UINT32_MAX;
++    if (state.state != lastState || state.error != lastError) {
++        NSLog(@"AzaharRoom state=%u error=%u protocol=%u", state.state, state.error, state.protocol);
++        lastState = state.state; lastError = state.error;
++    }
++    return @{ @"supported": @YES, @"state": @(state.state), @"error": @(state.error),
++              @"port": @(state.default_port), @"protocol": @(state.protocol), @"members": names };
++}
++
++- (BOOL)azaharRoomActive {
++    // Fail closed for synchronous callers off the executor; never inspect a dylib there.
++    if (![NSThread isMainThread]) return YES;
++    NSInteger state = [[self azaharRoomStatus][@"state"] integerValue];
++    return state == AZ_ROOM_JOINING || state == AZ_ROOM_JOINED || state == AZ_ROOM_LEAVING;
++}
++
++- (NSInteger)joinAzaharRoom:(NSString *)host port:(NSUInteger)port
++                  nickname:(NSString *)nickname password:(NSString *)password {
++    NSCharacterSet *nullCharacter = [NSCharacterSet characterSetWithRange:NSMakeRange(0, 1)];
++    if (![NSThread isMainThread] || port < 1 || port > 65535 ||
++        [host rangeOfCharacterFromSet:nullCharacter].location != NSNotFound ||
++        [nickname rangeOfCharacterFromSet:nullCharacter].location != NSNotFound ||
++        [password rangeOfCharacterFromSet:nullCharacter].location != NSNotFound) return 1;
++    dylib_t lib = active_room_core();
++    if (!lib) return 2;
++    int32_t (*join)(const char *, uint32_t, const char *, const char *) =
++        (void *)dylib_proc(lib, "retro_azahar_room_join");
++    if (!join) return 2;
++    NSInteger result = join(host.UTF8String, (uint32_t)port, nickname.UTF8String, password.UTF8String);
++    if (result == 0) {
++        // Reset runtime time controls without modifying the user's saved preferences.
++        [[self getRetroArch] fastForward:0];
++        [[self getRetroArch] setSlowmotionEnable:NO ratio:1];
++        [[self getRetroArch] setRewind:NO];
++        [[self getRetroArch] setRewindEnable:NO granularity:2 bufferSizeMB:20 bufferSizeStepMB:10 mute:NO];
++    }
++    return result;
++}
++
++- (void)leaveAzaharRoom {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self leaveAzaharRoom]; }); return; }
++    if (![NSThread isMainThread]) return;
++    dylib_t lib = active_room_core();
++    if (!lib) return;
++    int32_t (*leave)(void) = (void *)dylib_proc(lib, "retro_azahar_room_leave");
++    if (leave) leave(); // Nonblocking; core lifecycle drains its worker before unload.
++}
++
++- (void)azaharRoomDidEnterBackground:(NSNotification *)notification {
++    [self leaveAzaharRoom];
++}
++
+ - (void)installAzaharCIA:(NSString *_Nonnull)path {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self installAzaharCIA:path]; }); return; }
++    if (ManicRoomExperiment()) {
++        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"実験用Azahar: CIA導入は未対応"
++            message:@"起動前の保存先設定を検証できていないため中止しました。更新データは実験用3DS領域へバックアップのコピーを配置してください。" preferredStyle:UIAlertControllerStyleAlert];
++        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
++        UIViewController *presenter = [CocoaView get];
++        while (presenter.presentedViewController) presenter = presenter.presentedViewController;
++        [presenter presentViewController:alert animated:YES completion:nil];
++        return;
++    }
+     NSString *corePath = [[NSBundle mainBundle] pathForResource:@"azahar.libretro" ofType:@"framework" inDirectory:@"Frameworks"];
+     if (!corePath) {
+         return;
+diff --git a/ui/drivers/cocoa/LibretroCore.h b/ui/drivers/cocoa/LibretroCore.h
+--- a/ui/drivers/cocoa/LibretroCore.h
++++ b/ui/drivers/cocoa/LibretroCore.h
+@@ -92,6 +92,14 @@
+ };
+ 
+ @interface LibretroCore : NSObject
++// Main-thread only; symbols are resolved from the active runloop's core handle.
++- (NSDictionary<NSString *, id> *)azaharRoomStatus;
++- (NSInteger)joinAzaharRoom:(NSString *)host port:(NSUInteger)port
++                  nickname:(NSString *)nickname password:(NSString *)password;
++- (void)leaveAzaharRoom;
++- (BOOL)azaharRoomActive;
++- (NSUInteger)azaharKeyboardGeneration;
++
+ 
+ @property(nonatomic, strong) id retroArch_iOS;
+ @property (nonatomic, copy, nullable) NSString *workspace;
+@@ -99,7 +107,7 @@
+ 
+ + (instancetype)sharedInstance;
+ 
+-- (UIViewController *)startWithCustomSaveDir:(NSString *_Nullable)customSaveDir;
++- (UIViewController *_Nullable)startWithCustomSaveDir:(NSString *_Nullable)customSaveDir;
+ - (void)pause;
+ - (BOOL)isPaused;
+ - (void)resume;

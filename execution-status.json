@@ -1,0 +1,42 @@
+[
+  {
+    "stage": "B target=ui",
+    "実行済み": false,
+    "結果": "未実行"
+  },
+  {
+    "stage": "1 iOS arm64 core",
+    "実行済み": false,
+    "結果": "未実行"
+  },
+  {
+    "stage": "2 framework",
+    "実行済み": false,
+    "結果": "未実行"
+  },
+  {
+    "stage": "3 Mach-O/dependencies",
+    "実行済み": false,
+    "結果": "未実行"
+  },
+  {
+    "stage": "4 custom adapters",
+    "実行済み": false,
+    "結果": "未実行"
+  },
+  {
+    "stage": "5 Room exports",
+    "実行済み": false,
+    "結果": "未実行"
+  },
+  {
+    "stage": "6 C app",
+    "実行済み": false,
+    "結果": "未実行"
+  },
+  {
+    "stage": "7 unsigned IPA",
+    "実行済み": false,
+    "結果": "未実行"
+  }
+]

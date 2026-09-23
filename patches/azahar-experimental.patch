@@ -1,0 +1,1060 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -17,6 +17,11 @@
+ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/cmake-modules")
+ include(DownloadExternals)
+ include(CMakeDependentOption)
++
++option(MANIC_ROOM_EXPERIMENT "Isolated Manic Room experiment; no cheats or states" OFF)
++if(MANIC_ROOM_EXPERIMENT)
++    add_compile_definitions(MANIC_ROOM_EXPERIMENT=1)
++endif()
+ 
+ project(azahar LANGUAGES C CXX ASM)
+ # must be invoked after project() command when using CMAKE_TOOLCHAIN_FILE
+diff --git a/src/citra_libretro/CMakeLists.txt b/src/citra_libretro/CMakeLists.txt
+--- a/src/citra_libretro/CMakeLists.txt
++++ b/src/citra_libretro/CMakeLists.txt
+@@ -34,6 +34,11 @@
+ 
+ add_library(azahar_libretro SHARED
+         citra_libretro.cpp
++        manic_compat.cpp
++        manic_compat.h
++        room_session.cpp
++        room_session.h
++        room_api.h
+         citra_libretro.h
+         $<TARGET_OBJECTS:azahar_libretro_common>)
+ 
+diff --git a/src/citra_libretro/applets/swkbd_apple.cpp b/src/citra_libretro/applets/swkbd_apple.cpp
+--- a/src/citra_libretro/applets/swkbd_apple.cpp
++++ b/src/citra_libretro/applets/swkbd_apple.cpp
+@@ -77,7 +77,7 @@
+ }
+ 
+ void AppleKeyboard::SubmitInput(const std::string& text, u8 button) {
+-    Finalize(text, button);
++    if (Finalize(text, button) == Frontend::ValidationError::None) s_current_instance = nullptr;
+ }
+ 
+ } // namespace SoftwareKeyboard
+diff --git a/src/citra_libretro/citra_libretro.cpp b/src/citra_libretro/citra_libretro.cpp
+--- a/src/citra_libretro/citra_libretro.cpp
++++ b/src/citra_libretro/citra_libretro.cpp
+@@ -2,6 +2,9 @@
+ // Licensed under GPLv2 or any later version
+ // Refer to the license.txt file included.
+ 
++#include "citra_libretro/room_session.h"
++#include "common/file_util.h"
++#include "core/hle/service/cfg/cfg.h"
+ #include <list>
+ #include <numeric>
+ #include <vector>
+@@ -105,14 +108,18 @@
+     LibRetro::Audio::InitializeMicrophoneInterface();
+ 
+     LibRetro::Input::Init();
++    LibRetro::RoomSession::Initialize();
+ }
+ 
+ void retro_deinit() {
+     LOG_DEBUG(Frontend, "Shutting down core...");
++    LibRetro::RoomSession::GameStopped();
++    retro_set_keyboard_callback(nullptr);
+     if (Core::System::GetInstance().IsPoweredOn()) {
+         Core::System::GetInstance().Shutdown();
+     }
+ 
++    LibRetro::RoomSession::Shutdown();
+     LibRetro::Audio::ShutdownMicrophoneInterface();
+     LibRetro::Input::Shutdown();
+ 
+@@ -389,6 +396,13 @@
+ }
+ 
+ static bool do_load_game() {
++#ifdef MANIC_ROOM_EXPERIMENT
++    if (!FileUtil::GetUserPath(FileUtil::UserPath::UserDir).ends_with("/RoomExperiment-v1/3DS/")) {
++        LibRetro::DisplayMessage("Experimental core requires isolated RoomExperiment-v1/3DS storage.");
++        LOG_ERROR(Frontend, "Refusing game load: experimental save directory is not configured");
++        return false;
++    }
++#endif
+     const Core::System::ResultStatus load_result{
+         Core::System::GetInstance().Load(*emu_instance->emu_window, LibRetro::settings.file_path)};
+ 
+@@ -434,6 +448,8 @@
+     }
+ 
+     setup_memory_maps();
++    LibRetro::RoomSession::GameReady(Service::CFG::GetConsoleIdHash(Core::System::GetInstance()),
++                                    Service::CFG::GetConsoleMacAddress(Core::System::GetInstance()));
+ 
+     return true;
+ }
+@@ -511,6 +527,7 @@
+ }
+ 
+ void retro_reset() {
++    if (LibRetro::RoomSession::Active()) return;
+     LOG_DEBUG(Frontend, "retro_reset");
+     Core::System::GetInstance().Shutdown();
+     emu_instance->game_loaded = do_load_game();
+@@ -648,6 +665,8 @@
+ 
+ void retro_unload_game() {
+     LOG_DEBUG(Frontend, "Unloading game...");
++    LibRetro::RoomSession::GameStopped();
++    retro_set_keyboard_callback(nullptr);
+     LibRetro::Camera::ShutdownCameraInterface();
+     Core::System::GetInstance().Shutdown();
+ }
+@@ -705,6 +724,9 @@
+ std::optional<std::vector<u8>> savestate = {};
+ 
+ size_t retro_serialize_size() {
++#ifdef MANIC_ROOM_EXPERIMENT
++    return 0; // Cross-core states are not supported in this experiment.
++#endif
+     auto& system = Core::System::GetInstance();
+     if (!system.IsPoweredOn())
+         return 0;
+@@ -725,6 +747,10 @@
+ }
+ 
+ bool retro_serialize(void* data, size_t size) {
++#ifdef MANIC_ROOM_EXPERIMENT
++    return false; // Cross-core states are not supported in this experiment.
++#endif
++    if (LibRetro::RoomSession::Active()) return false;
+     if (!savestate.has_value())
+         return false;
+     if (size < savestate->size())
+@@ -735,6 +761,10 @@
+ }
+ 
+ bool retro_unserialize(const void* data, size_t size) {
++#ifdef MANIC_ROOM_EXPERIMENT
++    return false; // Cross-core states are not supported in this experiment.
++#endif
++    if (LibRetro::RoomSession::Active()) return false;
+     auto& system = Core::System::GetInstance();
+     if (!system.IsPoweredOn())
+         return false;
+diff --git a/src/citra_libretro/core_settings.cpp b/src/citra_libretro/core_settings.cpp
+--- a/src/citra_libretro/core_settings.cpp
++++ b/src/citra_libretro/core_settings.cpp
+@@ -1117,6 +1117,9 @@
+     auto use_libretro_saves = LibRetro::FetchVariable(config::storage::use_libretro_save_path,
+                                                       "LibRetro Default") == "LibRetro Default";
+ 
++#ifdef MANIC_ROOM_EXPERIMENT
++    use_libretro_saves = true; // Ignore old core path option in this isolated profile.
++#endif
+     if (use_libretro_saves) {
+         auto target_dir = LibRetro::GetSaveDir();
+         if (target_dir.empty()) {
+diff --git a/src/citra_libretro/libretro.osx.def b/src/citra_libretro/libretro.osx.def
+--- a/src/citra_libretro/libretro.osx.def
++++ b/src/citra_libretro/libretro.osx.def
+@@ -7,6 +7,10 @@
+ _retro_set_input_poll
+ _retro_set_input_state
+ _retro_init
++_retro_azahar_room_api_version
++_retro_azahar_room_snapshot
++_retro_azahar_room_join
++_retro_azahar_room_leave
+ _retro_deinit
+ _retro_api_version
+ _retro_get_system_info
+@@ -30,4 +34,9 @@
+ _retro_remove_amiibo
+ _retro_set_keyboard_callback
+ _retro_keyboard_input
+-_retro_install_cia
+\ No newline at end of file
++_retro_install_cia
++_retro_manic_experiment_api_version
++_retro_azahar_set_keyboard_callback
++_retro_azahar_keyboard_input
++_retro_azahar_load_amiibo
++_retro_azahar_is_searching_amiibo
+diff --git a/src/citra_libretro/manic_compat.cpp b/src/citra_libretro/manic_compat.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/citra_libretro/manic_compat.cpp
+@@ -0,0 +1,61 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#include "libretro.h"
++#include "citra_libretro/manic_compat.h"
++#ifndef MANIC_ROOM_EXPERIMENT
++#error This adapter requires the isolated experimental build profile
++#endif
++namespace {
++using Config = retro_azahar_keyboard_config_local;
++using Callback = void (*)(const Config*);
++Callback callback = nullptr;
++void Request(const retro_keyboard_config* source) {
++    if (!source || !callback) return;
++    Config copy{};
++    copy.button_config = source->button_config;
++    copy.accept_mode = source->accept_mode;
++    copy.multiline_mode = source->multiline_mode;
++    copy.max_text_length = source->max_text_length;
++    copy.max_digits = source->max_digits;
++    copy.hint_text = source->hint_text;
++    copy.button_text = source->button_text;
++    copy.button_text_count = source->button_text_count;
++    copy.prevent_digit = source->prevent_digit;
++    copy.prevent_at = source->prevent_at;
++    copy.prevent_percent = source->prevent_percent;
++    copy.prevent_backslash = source->prevent_backslash;
++    copy.prevent_profanity = source->prevent_profanity;
++    copy.enable_callback = source->enable_callback;
++    callback(&copy); // Borrowed pointers: frontend copies strings before returning.
++}
++}
++static_assert(offsetof(Config,button_config) == offsetof(retro_keyboard_config,button_config));
++static_assert(offsetof(Config,accept_mode) == offsetof(retro_keyboard_config,accept_mode));
++static_assert(offsetof(Config,multiline_mode) == offsetof(retro_keyboard_config,multiline_mode));
++static_assert(offsetof(Config,max_text_length) == offsetof(retro_keyboard_config,max_text_length));
++static_assert(offsetof(Config,max_digits) == offsetof(retro_keyboard_config,max_digits));
++static_assert(offsetof(Config,hint_text) == offsetof(retro_keyboard_config,hint_text));
++static_assert(offsetof(Config,button_text) == offsetof(retro_keyboard_config,button_text));
++static_assert(offsetof(Config,button_text_count) == offsetof(retro_keyboard_config,button_text_count));
++static_assert(offsetof(Config,prevent_digit) == offsetof(retro_keyboard_config,prevent_digit));
++static_assert(offsetof(Config,prevent_at) == offsetof(retro_keyboard_config,prevent_at));
++static_assert(offsetof(Config,prevent_percent) == offsetof(retro_keyboard_config,prevent_percent));
++static_assert(offsetof(Config,prevent_backslash) == offsetof(retro_keyboard_config,prevent_backslash));
++static_assert(offsetof(Config,prevent_profanity) == offsetof(retro_keyboard_config,prevent_profanity));
++static_assert(offsetof(Config,enable_callback) == offsetof(retro_keyboard_config,enable_callback));
++static_assert(sizeof(Config)==sizeof(retro_keyboard_config));
++// Like retro_run/load/unload, these four APIs require the emulation thread.
++// Manic's CocoaTouch runloop and normalized bridge execute on the main thread.
++extern "C" {
++RETRO_API uint32_t retro_manic_experiment_api_version(void) { return 1; }
++RETRO_API void retro_azahar_set_keyboard_callback(Callback cb) {
++    callback = cb;
++    retro_set_keyboard_callback(cb ? Request : nullptr);
++}
++RETRO_API void retro_azahar_keyboard_input(const char* text, int button) {
++    if (callback && button >= 0 && button <= 2) retro_keyboard_input(text, button);
++}
++RETRO_API bool retro_azahar_load_amiibo(const char* path) {
++    return path && retro_load_amiibo(path);
++}
++RETRO_API bool retro_azahar_is_searching_amiibo(void) { return retro_is_searching_amiibo(); }
++}
+diff --git a/src/citra_libretro/manic_compat.h b/src/citra_libretro/manic_compat.h
+new file mode 100644
+--- /dev/null
++++ b/src/citra_libretro/manic_compat.h
+@@ -0,0 +1,31 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++#include <stdbool.h>
++#include <stdint.h>
++#include <stddef.h>
++// Experimental Manic adapter contract 1; NOT retro_azahar_extension_version.
++struct retro_azahar_keyboard_config_local {
++    int button_config, accept_mode;
++    bool multiline_mode;
++    int max_text_length, max_digits;
++    const char* hint_text;
++    const char** button_text;
++    int button_text_count;
++    bool prevent_digit, prevent_at, prevent_percent, prevent_backslash;
++    bool prevent_profanity, enable_callback;
++};
++#if defined(__cplusplus)
++#define AZ_ASSERT static_assert
++#else
++#define AZ_ASSERT _Static_assert
++#endif
++AZ_ASSERT(sizeof(int)==4 && sizeof(bool)==1 && sizeof(void*)==8, "64-bit adapter ABI only");
++AZ_ASSERT(sizeof(struct retro_azahar_keyboard_config_local)==56, "keyboard sizeof");
++#define AZ_OFFSET(f,n) AZ_ASSERT(offsetof(struct retro_azahar_keyboard_config_local,f)==n, #f)
++AZ_OFFSET(button_config,0); AZ_OFFSET(accept_mode,4); AZ_OFFSET(multiline_mode,8);
++AZ_OFFSET(max_text_length,12); AZ_OFFSET(max_digits,16); AZ_OFFSET(hint_text,24);
++AZ_OFFSET(button_text,32); AZ_OFFSET(button_text_count,40); AZ_OFFSET(prevent_digit,44);
++AZ_OFFSET(prevent_at,45); AZ_OFFSET(prevent_percent,46); AZ_OFFSET(prevent_backslash,47);
++AZ_OFFSET(prevent_profanity,48); AZ_OFFSET(enable_callback,49);
++#undef AZ_OFFSET
++#undef AZ_ASSERT
+diff --git a/src/citra_libretro/room_api.h b/src/citra_libretro/room_api.h
+new file mode 100644
+--- /dev/null
++++ b/src/citra_libretro/room_api.h
+@@ -0,0 +1,38 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++#include <stdint.h>
++#ifdef __cplusplus
++extern "C" {
++#endif
++#if defined(_WIN32)
++#define AZ_ROOM_EXPORT __declspec(dllexport)
++#else
++#define AZ_ROOM_EXPORT __attribute__((visibility("default")))
++#endif
++
++/* ABI 1. All strings are UTF-8, NUL terminated and copied before join returns.
++ * Caller owns snapshot storage; no pointers or callbacks cross this boundary.
++ * Calls must not overlap dlclose. Query functions do not initialize the core.
++ * Join: 0 = accepted, NOT joined; 1 = invalid input; 2 = not ready; 3 = busy;
++ * -1 = internal error. Only snapshot.state == 3 means joined.
++ * IPv4 literals only. Nicknames: [A-Za-z0-9._ -]{4,20}. Password <=128 bytes.
++ * Snapshot errors 1..13 map to RoomMember::Error + 1; 100 = internal,
++ * 101 = handshake timeout. State 4 lasts until socket cleanup completes. */
++enum { AZ_ROOM_OFFLINE = 0, AZ_ROOM_IDLE = 1, AZ_ROOM_JOINING = 2,
++       AZ_ROOM_JOINED = 3, AZ_ROOM_LEAVING = 4 };
++typedef struct az_room_snapshot {
++    uint32_t state;
++    uint32_t error;
++    uint32_t protocol;
++    uint32_t default_port;
++    uint32_t member_count;
++    char members[254][21];
++} az_room_snapshot;
++AZ_ROOM_EXPORT uint32_t retro_azahar_room_api_version(void);
++AZ_ROOM_EXPORT int32_t retro_azahar_room_snapshot(az_room_snapshot* out, uint32_t size);
++AZ_ROOM_EXPORT int32_t retro_azahar_room_join(const char* ip, uint32_t port,
++                                           const char* nickname, const char* password);
++AZ_ROOM_EXPORT int32_t retro_azahar_room_leave(void);
++#ifdef __cplusplus
++}
++#endif
+diff --git a/src/citra_libretro/room_session.cpp b/src/citra_libretro/room_session.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/citra_libretro/room_session.cpp
+@@ -0,0 +1,229 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#include "citra_libretro/room_api.h"
++#include "citra_libretro/room_session.h"
++#include <algorithm>
++#include <atomic>
++#include <chrono>
++#include <cstring>
++#include <mutex>
++#include <thread>
++#include "common/logging/log.h"
++#include "network/network.h"
++
++namespace {
++using Member = Network::RoomMember;
++using namespace std::chrono_literals;
++// API/lifecycle operations are serialized separately from network callbacks.
++std::mutex api_mutex, snapshot_mutex;
++az_room_snapshot snapshot{};
++std::shared_ptr<Member> member;
++Member::CallbackHandle<Member::State> state_callback;
++Member::CallbackHandle<Member::Error> error_callback;
++Member::CallbackHandle<Network::RoomInformation> room_callback;
++std::thread worker;
++std::atomic<bool> cancel{false}, finished{true};
++bool owns_network = false, ready = false;
++std::string console_hash;
++Network::MacAddress console_mac = Network::NoPreferredMac;
++
++bool Bounded(const char* value, size_t limit, std::string& copy) {
++    if (!value) return false;
++    size_t length = 0;
++    while (length <= limit && value[length]) ++length;
++    if (length > limit) return false;
++    copy.assign(value, length);
++    return true;
++}
++bool IPv4(const std::string& ip) {
++    size_t pos = 0;
++    for (int part = 0; part < 4; ++part) {
++        size_t begin = pos;
++        unsigned value = 0;
++        while (pos < ip.size() && ip[pos] >= '0' && ip[pos] <= '9') {
++            value = value * 10 + (ip[pos++] - '0');
++            if (pos - begin > 3 || value > 255) return false;
++        }
++        if (pos == begin || (pos - begin > 1 && ip[begin] == '0')) return false;
++        if (part != 3 && (pos >= ip.size() || ip[pos++] != '.')) return false;
++    }
++    return pos == ip.size() && ip != "0.0.0.0" && ip != "255.255.255.255";
++}
++void ClearMembers() {
++    snapshot.member_count = 0;
++    std::memset(snapshot.members, 0, sizeof(snapshot.members));
++}
++void StopWorker() {
++    cancel = true;
++    if (worker.joinable()) worker.join();
++}
++void Run(std::string ip, uint16_t port, std::string nick, std::string password,
++         std::string hash, Network::MacAddress mac) noexcept {
++    try {
++        member->Join(nick, hash, ip.c_str(), port, 0, mac,
++                     password, "", [] { return cancel.load(); });
++        // Covers a transport connection that never receives a room JoinSuccess.
++        const auto deadline = std::chrono::steady_clock::now() + 10s;
++        while (!cancel && member->IsConnected()) {
++            if (member->GetState() == Member::State::Joining &&
++                std::chrono::steady_clock::now() >= deadline) {
++                std::lock_guard lock(snapshot_mutex);
++                snapshot.error = 101;
++                break;
++            }
++            std::this_thread::sleep_for(10ms);
++        }
++    } catch (...) {
++        std::lock_guard lock(snapshot_mutex);
++        snapshot.error = 100;
++    }
++    // A failed Join may have a client but no loop thread. Leave is idempotent.
++    member->Leave(true);
++    {
++        std::lock_guard lock(snapshot_mutex);
++        snapshot.state = AZ_ROOM_IDLE;
++        ClearMembers();
++    }
++    finished = true;
++}
++}
++
++namespace LibRetro::RoomSession {
++void Initialize() noexcept {
++    try {
++        std::lock_guard api_lock(api_mutex);
++        if (member) return;
++        if (Network::GetRoomMember().expired()) {
++            if (!Network::Init()) {
++                std::lock_guard lock(snapshot_mutex);
++                snapshot.error = 100;
++                return;
++            }
++            owns_network = true;
++        }
++        member = Network::GetRoomMember().lock();
++        state_callback = member->BindOnStateChanged([](const Member::State& state) {
++            LOG_INFO(Network, "Room bridge member state={}", static_cast<unsigned>(state));
++            std::lock_guard lock(snapshot_mutex);
++            if (cancel) return;
++            if (state == Member::State::Joined || state == Member::State::Moderator)
++                snapshot.state = AZ_ROOM_JOINED;
++            // Idle is exposed only after Run has cleaned up the transport.
++        });
++        error_callback = member->BindOnError([](const Member::Error& error) {
++            LOG_INFO(Network, "Room bridge error={}", static_cast<unsigned>(error) + 1);
++            std::lock_guard lock(snapshot_mutex);
++            if (!cancel) snapshot.error = static_cast<uint32_t>(error) + 1;
++        });
++        room_callback = member->BindOnRoomInformationChanged([](const auto&) {
++            // Invoked on MemberLoop after member_information is updated. Do not
++            // call the unsynchronized getter from the UI/polling thread.
++            std::lock_guard lock(snapshot_mutex);
++            if (cancel) return;
++            ClearMembers();
++            for (const auto& peer : member->GetMemberInformation()) {
++                if (snapshot.member_count == 254) break;
++                auto& dest = snapshot.members[snapshot.member_count++];
++                std::memcpy(dest, peer.nickname.data(), std::min(peer.nickname.size(), size_t{20}));
++            }
++        });
++    } catch (...) {
++        std::lock_guard lock(snapshot_mutex);
++        snapshot.error = 100;
++    }
++}
++void GameReady(std::string hash, std::array<uint8_t, 6> mac) noexcept {
++    try {
++        std::lock_guard api_lock(api_mutex);
++        if (!member || !state_callback || !error_callback || !room_callback) return;
++        StopWorker(); // A repeated GameReady cannot orphan an existing session.
++        console_hash = std::move(hash);
++        console_mac = mac;
++        ready = true;
++        std::lock_guard lock(snapshot_mutex);
++        snapshot.state = AZ_ROOM_IDLE;
++        snapshot.error = 0;
++    } catch (...) {}
++}
++void GameStopped() noexcept {
++    std::lock_guard api_lock(api_mutex);
++    ready = false;
++    StopWorker();
++    console_hash.clear();
++    std::lock_guard lock(snapshot_mutex);
++    snapshot.state = AZ_ROOM_OFFLINE;
++    ClearMembers();
++}
++void Shutdown() noexcept {
++    std::lock_guard api_lock(api_mutex);
++    ready = false;
++    StopWorker();
++    console_hash.clear();
++    {
++        std::lock_guard lock(snapshot_mutex);
++        snapshot.state = AZ_ROOM_OFFLINE;
++        ClearMembers();
++    }
++    if (member) {
++        member->Unbind(state_callback);
++        member->Unbind(error_callback);
++        member->Unbind(room_callback);
++        state_callback.reset(); error_callback.reset(); room_callback.reset();
++        member.reset();
++    }
++    if (owns_network) Network::Shutdown();
++    owns_network = false;
++}
++bool Active() noexcept { return !finished.load(); }
++}
++
++extern "C" uint32_t retro_azahar_room_api_version() { return 1; }
++extern "C" int32_t retro_azahar_room_snapshot(az_room_snapshot* out, uint32_t size) {
++    if (!out || size != sizeof(*out)) return 1;
++    try {
++        std::lock_guard lock(snapshot_mutex);
++        *out = snapshot;
++        out->protocol = Network::network_version;
++        out->default_port = Network::DefaultRoomPort;
++        return 0;
++    } catch (...) { return -1; }
++}
++extern "C" int32_t retro_azahar_room_join(const char* address, uint32_t port,
++                                        const char* nickname, const char* secret) {
++    try {
++        std::string ip, nick, password;
++        if (!Bounded(address, 15, ip) || !IPv4(ip) || port < 1 || port > 65535 ||
++            !Bounded(nickname, 20, nick) || nick.size() < 4 ||
++            nick.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._ -")
++                != std::string::npos || !Bounded(secret, 128, password)) return 1;
++        std::lock_guard api_lock(api_mutex);
++        if (!ready) return 2;
++        if (!finished) return 3;
++        if (worker.joinable()) worker.join();
++        cancel = false;
++        {
++            std::lock_guard lock(snapshot_mutex);
++            snapshot.state = AZ_ROOM_JOINING;
++            snapshot.error = 0;
++            ClearMembers();
++        }
++        finished = false;
++        try { worker = std::thread(Run, ip, static_cast<uint16_t>(port), nick, password, console_hash, console_mac); }
++        catch (...) {
++            finished = true;
++            std::lock_guard lock(snapshot_mutex);
++            snapshot.state = AZ_ROOM_IDLE;
++            snapshot.error = 100;
++            return -1;
++        }
++        return 0;
++    } catch (...) { return -1; }
++}
++extern "C" int32_t retro_azahar_room_leave() {
++    try {
++        std::lock_guard api_lock(api_mutex);
++        cancel = true;
++        std::lock_guard lock(snapshot_mutex);
++        if (!finished) snapshot.state = AZ_ROOM_LEAVING;
++        return 0;
++    } catch (...) { return -1; }
++}
+diff --git a/src/citra_libretro/room_session.h b/src/citra_libretro/room_session.h
+new file mode 100644
+--- /dev/null
++++ b/src/citra_libretro/room_session.h
+@@ -0,0 +1,14 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++#include <array>
++#include <cstdint>
++#include <string>
++namespace LibRetro::RoomSession {
++// Called by the emulation lifecycle, never from the network worker.
++void Initialize() noexcept;
++void GameReady(std::string console_id_hash,
++               std::array<uint8_t, 6> mac = {255, 255, 255, 255, 255, 255}) noexcept;
++void GameStopped() noexcept;
++void Shutdown() noexcept;
++bool Active() noexcept;
++}
+diff --git a/src/common/file_util.cpp b/src/common/file_util.cpp
+--- a/src/common/file_util.cpp
++++ b/src/common/file_util.cpp
+@@ -929,6 +929,11 @@
+ } // namespace
+ 
+ void SetUserPath(const std::string& path) {
++#ifdef MANIC_ROOM_EXPERIMENT
++    // Existing emplace() entries otherwise retain the old NAND/SDMC path after
++    // a prior GetUserPath() initialized defaults or a different game unloaded.
++    if (!path.empty()) g_paths.clear();
++#endif
+     std::string& user_path = g_paths[UserPath::UserDir];
+ 
+     if (!path.empty() && CreateFullPath(path)) {
+diff --git a/src/common/logging/backend.h b/src/common/logging/backend.h
+--- a/src/common/logging/backend.h
++++ b/src/common/logging/backend.h
+@@ -4,6 +4,7 @@
+ 
+ #pragma once
+ 
++#include <string>
+ #include <string_view>
+ #include "common/logging/filter.h"
+ #ifdef HAVE_LIBRETRO
+diff --git a/src/core/cheats/cheats.cpp b/src/core/cheats/cheats.cpp
+--- a/src/core/cheats/cheats.cpp
++++ b/src/core/cheats/cheats.cpp
+@@ -106,11 +106,13 @@
+ void CheatEngine::RunCallback([[maybe_unused]] std::uintptr_t user_data, s64 cycles_late) {
+     {
+         std::shared_lock lock{cheats_list_mutex};
++#ifndef MANIC_ROOM_EXPERIMENT
+         for (const auto& cheat : cheats_list) {
+             if (cheat->IsEnabled()) {
+                 cheat->Execute(system, process_id);
+             }
+         }
++#endif
+     }
+     system.CoreTiming().ScheduleEvent(run_interval_ticks - cycles_late, event);
+ }
+diff --git a/src/core/hle/service/nwm/nwm_uds.cpp b/src/core/hle/service/nwm/nwm_uds.cpp
+--- a/src/core/hle/service/nwm/nwm_uds.cpp
++++ b/src/core/hle/service/nwm/nwm_uds.cpp
+@@ -1645,7 +1645,8 @@
+     MacAddress mac;
+ 
+     if (auto room_member = Network::GetRoomMember().lock();
+-        room_member && room_member->IsConnected()) {
++        room_member && (room_member->GetState() == Network::RoomMember::State::Joined ||
++                        room_member->GetState() == Network::RoomMember::State::Moderator)) {
+         mac = room_member->GetMacAddress();
+         if (mac != CFG::GetConsoleMacAddress(system)) {
+             LOG_WARNING(Service_NWM, "Room member mac address is different from the console mac "
+diff --git a/src/network/room_member.cpp b/src/network/room_member.cpp
+--- a/src/network/room_member.cpp
++++ b/src/network/room_member.cpp
+@@ -4,6 +4,7 @@
+ 
+ #include <algorithm>
+ #include <atomic>
++#include <chrono>
+ #include <list>
+ #include <mutex>
+ #include <set>
+@@ -30,6 +31,7 @@
+     /// The current game name, id and version
+     GameInfo current_game_info;
+ 
++    std::atomic<bool> immediate_disconnect{false};
+     std::atomic<State> state{State::Idle}; ///< Current state of the RoomMember.
+     void SetState(const State new_state);
+     void SetError(const Error new_error);
+@@ -421,10 +423,20 @@
+ 
+     if (!server)
+         return;
++    if (immediate_disconnect) {
++        enet_peer_disconnect_now(server, 0);
++        server = nullptr;
++        return;
++    }
+     enet_peer_disconnect(server, 0);
+ 
+     ENetEvent event;
+-    while (enet_host_service(client, &event, ConnectionTimeoutMs) > 0) {
++    const auto deadline = std::chrono::steady_clock::now() +
++                          std::chrono::milliseconds(ConnectionTimeoutMs);
++    while (!immediate_disconnect && std::chrono::steady_clock::now() < deadline) {
++        const int result = enet_host_service(client, &event, 25);
++        if (result < 0) break;
++        if (result == 0) continue;
+         switch (event.type) {
+         case ENET_EVENT_TYPE_RECEIVE:
+             enet_packet_destroy(event.packet); // Ignore all incoming data
+@@ -539,7 +551,7 @@
+ void RoomMember::Join(const std::string& nick, const std::string& console_id_hash,
+                       const char* server_addr, u16 server_port, u16 client_port,
+                       const MacAddress& preferred_mac, const std::string& password,
+-                      const std::string& token) {
++                      const std::string& token, std::function<bool()> cancelled) {
+     // If the member is connected, kill the connection first
+     if (room_member_impl->loop_thread && room_member_impl->loop_thread->joinable()) {
+         Leave();
+@@ -551,13 +563,23 @@
+ 
+     if (!room_member_impl->client) {
+         room_member_impl->client = enet_host_create(nullptr, 1, NumChannels, 0, 0);
+-        ASSERT_MSG(room_member_impl->client != nullptr, "Could not create client");
+-    }
+-
++        if (!room_member_impl->client) {
++            room_member_impl->SetState(State::Idle);
++            room_member_impl->SetError(Error::UnknownError);
++            return;
++        }
++    }
++
++    room_member_impl->immediate_disconnect = false;
+     room_member_impl->SetState(State::Joining);
+ 
+     ENetAddress address{};
+-    enet_address_set_host(&address, server_addr);
++    if (enet_address_set_host(&address, server_addr) != 0) {
++        room_member_impl->SetState(State::Idle);
++        room_member_impl->SetError(Error::CouldNotConnect);
++        Leave(true);
++        return;
++    }
+     address.port = server_port;
+     room_member_impl->server =
+         enet_host_connect(room_member_impl->client, &address, NumChannels, 0);
+@@ -569,14 +591,26 @@
+     }
+ 
+     ENetEvent event{};
+-    int net = enet_host_service(room_member_impl->client, &event, ConnectionTimeoutMs);
++    int net = 0;
++    const auto deadline = std::chrono::steady_clock::now() +
++                          std::chrono::milliseconds(ConnectionTimeoutMs);
++    do {
++        if (cancelled && cancelled()) {
++            Leave(true);
++            return;
++        }
++        net = enet_host_service(room_member_impl->client, &event, 25);
++        if (net != 0) break;
++    } while (std::chrono::steady_clock::now() < deadline);
+     if (net > 0 && event.type == ENET_EVENT_TYPE_CONNECT) {
+         room_member_impl->nickname = nick;
+         room_member_impl->StartLoop();
+         room_member_impl->SendJoinRequest(nick, console_id_hash, preferred_mac, password, token);
+         SendGameInfo(room_member_impl->current_game_info);
+     } else {
+-        enet_peer_disconnect(room_member_impl->server, 0);
++        if (net > 0 && event.type == ENET_EVENT_TYPE_RECEIVE)
++            enet_packet_destroy(event.packet);
++        Leave(true);
+         room_member_impl->SetState(State::Idle);
+         room_member_impl->SetError(Error::CouldNotConnect);
+     }
+@@ -678,13 +712,20 @@
+     room_member_impl->callbacks.Get<T>().erase(handle);
+ }
+ 
+-void RoomMember::Leave() {
++void RoomMember::Leave(bool immediate) {
++    room_member_impl->immediate_disconnect = immediate;
+     room_member_impl->SetState(State::Idle);
+-    room_member_impl->loop_thread->join();
+-    room_member_impl->loop_thread.reset();
+-
+-    enet_host_destroy(room_member_impl->client);
+-    room_member_impl->client = nullptr;
++    if (room_member_impl->loop_thread) {
++        room_member_impl->loop_thread->join();
++        room_member_impl->loop_thread.reset();
++    }
++    if (room_member_impl->client) {
++        enet_host_destroy(room_member_impl->client);
++        room_member_impl->client = nullptr;
++    }
++    room_member_impl->server = nullptr;
++    std::lock_guard lock(room_member_impl->send_list_mutex);
++    room_member_impl->send_list.clear();
+ }
+ 
+ template void RoomMember::Unbind(CallbackHandle<WifiPacket>);
+diff --git a/src/network/room_member.h b/src/network/room_member.h
+--- a/src/network/room_member.h
++++ b/src/network/room_member.h
+@@ -164,7 +164,8 @@
+     void Join(const std::string& nickname, const std::string& console_id_hash,
+               const char* server_addr = "127.0.0.1", u16 server_port = DefaultRoomPort,
+               u16 client_port = 0, const MacAddress& preferred_mac = NoPreferredMac,
+-              const std::string& password = "", const std::string& token = "");
++              const std::string& password = "", const std::string& token = "",
++              std::function<bool()> cancelled = {});
+ 
+     /**
+      * Sends a WiFi packet to the room.
+@@ -268,7 +269,7 @@
+     /**
+      * Leaves the current room.
+      */
+-    void Leave();
++    void Leave(bool immediate = false);
+ 
+ private:
+     class RoomMemberImpl;
+diff --git a/tests/room_bridge/CMakeLists.txt b/tests/room_bridge/CMakeLists.txt
+new file mode 100644
+--- /dev/null
++++ b/tests/room_bridge/CMakeLists.txt
+@@ -0,0 +1,33 @@
++cmake_minimum_required(VERSION 3.25)
++project(room_bridge_tests LANGUAGES C CXX)
++set(CMAKE_CXX_STANDARD 20)
++get_filename_component(AZAHAR "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
++set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
++add_subdirectory("${AZAHAR}/externals/enet" enet)
++add_subdirectory("${AZAHAR}/externals/fmt" fmt EXCLUDE_FROM_ALL)
++add_executable(room_bridge_tests
++    integration.cpp test_logging.cpp
++    "${AZAHAR}/src/citra_libretro/room_session.cpp"
++    "${AZAHAR}/src/network/network.cpp"
++    "${AZAHAR}/src/network/room.cpp"
++    "${AZAHAR}/src/network/room_member.cpp"
++    "${AZAHAR}/src/network/packet.cpp"
++    "${AZAHAR}/src/network/verify_user.cpp")
++target_include_directories(room_bridge_tests PRIVATE
++    "${AZAHAR}/src" "${AZAHAR}/externals/boost" "${AZAHAR}/externals/enet/include")
++target_link_libraries(room_bridge_tests PRIVATE enet fmt::fmt)
++if(WIN32)
++    target_compile_definitions(room_bridge_tests PRIVATE NOMINMAX _WIN32_WINNT=0x0601)
++    target_link_libraries(room_bridge_tests PRIVATE ws2_32 winmm)
++    target_link_libraries(enet PUBLIC ws2_32 winmm)
++endif()
++enable_testing()
++add_test(NAME actual_enet_room_bridge COMMAND room_bridge_tests)
++set_tests_properties(actual_enet_room_bridge PROPERTIES TIMEOUT 60)
++
++add_executable(keyboard_abi_layout abi_layout.cpp)
++target_include_directories(keyboard_abi_layout PRIVATE "${AZAHAR}/src" "${AZAHAR}/externals/libretro-common/libretro-common/include")
++add_test(NAME keyboard_abi_layout COMMAND keyboard_abi_layout)
++add_library(manic_adapter_compile OBJECT "${AZAHAR}/src/citra_libretro/manic_compat.cpp")
++target_compile_definitions(manic_adapter_compile PRIVATE MANIC_ROOM_EXPERIMENT=1)
++target_include_directories(manic_adapter_compile PRIVATE "${AZAHAR}/src" "${AZAHAR}/externals/libretro-common/libretro-common/include")
+diff --git a/tests/room_bridge/abi_layout.cpp b/tests/room_bridge/abi_layout.cpp
+new file mode 100644
+--- /dev/null
++++ b/tests/room_bridge/abi_layout.cpp
+@@ -0,0 +1,21 @@
++#include <cstdio>
++#include "libretro.h"
++#include "citra_libretro/manic_compat.h"
++using Config = retro_azahar_keyboard_config_local;
++static_assert(offsetof(Config,button_config)==offsetof(retro_keyboard_config,button_config));
++static_assert(offsetof(Config,accept_mode)==offsetof(retro_keyboard_config,accept_mode));
++static_assert(offsetof(Config,multiline_mode)==offsetof(retro_keyboard_config,multiline_mode));
++static_assert(offsetof(Config,max_text_length)==offsetof(retro_keyboard_config,max_text_length));
++static_assert(offsetof(Config,max_digits)==offsetof(retro_keyboard_config,max_digits));
++static_assert(offsetof(Config,hint_text)==offsetof(retro_keyboard_config,hint_text));
++static_assert(offsetof(Config,button_text)==offsetof(retro_keyboard_config,button_text));
++static_assert(offsetof(Config,button_text_count)==offsetof(retro_keyboard_config,button_text_count));
++static_assert(offsetof(Config,prevent_digit)==offsetof(retro_keyboard_config,prevent_digit));
++static_assert(offsetof(Config,prevent_at)==offsetof(retro_keyboard_config,prevent_at));
++static_assert(offsetof(Config,prevent_percent)==offsetof(retro_keyboard_config,prevent_percent));
++static_assert(offsetof(Config,prevent_backslash)==offsetof(retro_keyboard_config,prevent_backslash));
++static_assert(offsetof(Config,prevent_profanity)==offsetof(retro_keyboard_config,prevent_profanity));
++static_assert(offsetof(Config,enable_callback)==offsetof(retro_keyboard_config,enable_callback));
++static_assert(sizeof(Config)==sizeof(retro_keyboard_config));
++static_assert(alignof(Config)==8 && alignof(retro_keyboard_config)==8);
++int main() { std::puts("PASS keyboard ABI: sizeof=56 align=8; all 14 offsets match real public header"); }
+diff --git a/tests/room_bridge/integration.cpp b/tests/room_bridge/integration.cpp
+new file mode 100644
+--- /dev/null
++++ b/tests/room_bridge/integration.cpp
+@@ -0,0 +1,179 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#include <atomic>
++#include <chrono>
++#include <cstdio>
++#include <stdexcept>
++#include <thread>
++#include "citra_libretro/room_api.h"
++#include "citra_libretro/room_session.h"
++#include "network/network.h"
++#include "network/verify_user.h"
++#include "enet/enet.h"
++using namespace std::chrono_literals;
++namespace Session = LibRetro::RoomSession;
++void Check(bool condition, const char* message) {
++    if (!condition) throw std::runtime_error(message);
++}
++az_room_snapshot Read() {
++    az_room_snapshot value{};
++    Check(retro_azahar_room_snapshot(&value, sizeof(value)) == 0, "snapshot");
++    return value;
++}
++template<class F> void Wait(F predicate, int ms = 3000) {
++    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
++    while (!predicate()) {
++        Check(std::chrono::steady_clock::now() < end, "wait timeout");
++        std::this_thread::sleep_for(10ms);
++    }
++}
++void Idle() { Wait([] { return !Session::Active(); }); }
++// Controlled ENet endpoint, not a PC emulator. Exercises rejection and a peer
++// that accepts transport but never sends an application-level join response.
++class ProtocolFixture {
++public:
++    ENetHost* host = nullptr;
++    unsigned port = 35100;
++    std::atomic<bool> stop{false};
++    std::thread loop;
++    explicit ProtocolFixture(bool reject) {
++        ENetAddress address{};
++        enet_address_set_host_ip(&address, "127.0.0.1");
++        for (; port < 35200; ++port) {
++            address.port = static_cast<enet_uint16>(port);
++            host = enet_host_create(&address, 1, 1, 0, 0);
++            if (host) break;
++        }
++        Check(host != nullptr, "fixture bind");
++        loop = std::thread([this, reject] {
++            while (!stop) {
++                ENetEvent event{};
++                if (enet_host_service(host, &event, 10) > 0 && event.type == ENET_EVENT_TYPE_RECEIVE) {
++                    if (reject) {
++                        const unsigned char wrong_version[] = {Network::IdVersionMismatch, 0, 0, 0, 99};
++                        enet_peer_send(event.peer, 0, enet_packet_create(wrong_version, sizeof(wrong_version), ENET_PACKET_FLAG_RELIABLE));
++                    }
++                    enet_packet_destroy(event.packet);
++                }
++            }
++        });
++    }
++    ~ProtocolFixture() { stop = true; loop.join(); enet_host_destroy(host); }
++};
++int main() {
++    try {
++        Check(retro_azahar_room_api_version() == 1, "ABI");
++        Check(Read().state == AZ_ROOM_OFFLINE, "offline before init");
++        Check(retro_azahar_room_snapshot(nullptr, 0) == 1, "null buffer");
++        Check(retro_azahar_room_join("127.0.0.1", 24872, "test", "") == 2, "not ready");
++        Session::Initialize();
++        auto same = Network::GetRoomMember().lock();
++        Session::Initialize();
++        Check(same == Network::GetRoomMember().lock(), "must not initialize twice");
++        const Network::MacAddress console_mac{0, 31, 50, 1, 2, 3};
++        Session::GameReady("test-only-console-identity", console_mac);
++        for (const auto* ip : {"", "1.2.3", "256.1.2.3", "01.2.3.4", "0.0.0.0", "::1"})
++            Check(retro_azahar_room_join(ip, 24872, "test", "") == 1, "bad IP");
++        Check(retro_azahar_room_join("127.0.0.1", 0, "test", "") == 1, "bad port");
++        Check(retro_azahar_room_join("127.0.0.1", 65536, "test", "") == 1, "overflow port");
++        Check(retro_azahar_room_join("127.0.0.1", 24872, "abc", "") == 1, "short nick");
++        Check(retro_azahar_room_join("127.0.0.1", 24872, "test", std::string(129, 'x').c_str()) == 1, "long secret");
++        std::puts("PASS ABI, lifecycle, input validation");
++
++        auto room = Network::GetRoom().lock();
++        // Select a free loopback port without binding any LAN interface.
++        unsigned port = 35000;
++        while (port < 35100 && !room->Create("Test Room", "", "127.0.0.1", port, "secret", 4,
++                 "", "", 0, std::make_unique<Network::VerifyUser::NullBackend>())) ++port;
++        Check(port < 35100, "room create");
++        Check(retro_azahar_room_join("127.0.0.1", port, "iPhoneTest", "wrong") == 0, "accepted");
++        Idle();
++        Check(Read().state == AZ_ROOM_IDLE && Read().error == 8, "wrong password");
++        std::puts("PASS real room password rejection");
++
++        Check(retro_azahar_room_join("127.0.0.1", port, "iPhoneTest", "secret") == 0, "join retry");
++        Wait([] { return Read().state == AZ_ROOM_JOINED; });
++        Check(same->GetState() == Network::RoomMember::State::Joined, "same NWM member");
++        Check(same->GetMacAddress() == console_mac, "preserve CFG MAC used before join");
++        Check(Read().member_count == 1, "participant list");
++        Check(retro_azahar_room_join("127.0.0.1", port, "iPhoneTest", "secret") == 3, "busy");
++        Network::RoomMember peer;
++        peer.Join("DesktopTest", "second-identity", "127.0.0.1", port, 0, Network::NoPreferredMac, "secret");
++        Wait([&] { return peer.GetState() == Network::RoomMember::State::Joined; });
++        Wait([] { return Read().member_count == 2; });
++        std::atomic<bool> got_packet{false};
++        auto callback = same->BindOnWifiPacketReceived([&](const auto& p) {
++            got_packet = p.data == std::vector<u8>{1,2,3,4} && p.channel == 11;
++        });
++        Network::WifiPacket wifi{};
++        wifi.type = Network::WifiPacket::PacketType::Data;
++        wifi.channel = 11;
++        wifi.data = {1,2,3,4};
++        wifi.transmitter_address = peer.GetMacAddress();
++        wifi.destination_address = Network::BroadcastMac;
++        peer.SendWifiPacket(wifi);
++        Wait([&] { return got_packet.load(); });
++        same->Unbind(callback);
++        peer.Leave(true);
++        std::puts("PASS actual join, membership, same instance, WiFi packet transport (not game UDS)");
++
++        retro_azahar_room_leave(); Idle();
++        Check(Read().state == AZ_ROOM_IDLE, "leave");
++        Check(retro_azahar_room_join("127.0.0.1", port, "iPhoneTest", "secret") == 0, "rejoin");
++        Wait([] { return Read().state == AZ_ROOM_JOINED; });
++        room->Destroy();
++        Idle();
++        Check(Read().error == 1, "host lost");
++        std::puts("PASS leave, rejoin, host close");
++
++        auto begin = std::chrono::steady_clock::now();
++        Check(retro_azahar_room_join("127.0.0.1", port, "iPhoneTest", "") == 0, "cancel join");
++        std::this_thread::sleep_for(40ms);
++        retro_azahar_room_leave(); Idle();
++        Check(std::chrono::steady_clock::now() - begin < 1s, "prompt cancellation");
++        Check(retro_azahar_room_join("127.0.0.1", port, "iPhoneTest", "") == 0, "timeout join");
++        Wait([] { return !Session::Active(); }, 7000);
++        Check(Read().error == 9, "timeout error");
++        std::puts("PASS cancel under 1s, reconnect after cancel, real timeout");
++        {
++            ProtocolFixture fixture(true);
++            Check(retro_azahar_room_join("127.0.0.1", fixture.port, "iPhoneTest", "") == 0, "version join");
++            Idle();
++            Check(Read().error == 7, "wrong version surfaced");
++        }
++        {
++            ProtocolFixture fixture(false);
++            Check(retro_azahar_room_join("127.0.0.1", fixture.port, "iPhoneTest", "") == 0, "silent room join");
++            Wait([] { return !Session::Active(); }, 13000);
++            Check(Read().error == 101, "application handshake timeout");
++        }
++        std::puts("PASS controlled ENet fixtures: wrong-version error and missing JoinSuccess timeout");
++        for (int i = 0; i < 10; ++i) {
++            Check(retro_azahar_room_join("127.0.0.1", port, "iPhoneTest", "") == 0, "cycle");
++            Session::GameStopped();
++            Check(Read().state == AZ_ROOM_OFFLINE, "stopped");
++            Session::GameReady("test-only-console-identity");
++        }
++        Session::Shutdown(); same.reset(); room.reset();
++        Session::Initialize(); Session::GameReady("test-only-console-identity");
++        Check(Read().state == AZ_ROOM_IDLE, "reload lifecycle");
++        Session::Shutdown();
++        std::atomic<bool> reading{true};
++        std::thread reader([&] { while (reading) { auto snapshot = Read(); (void)snapshot; } });
++        for (int i = 0; i < 100; ++i) {
++            Session::Initialize(); Session::GameReady("concurrent-test");
++            Check(retro_azahar_room_join("127.0.0.1", port, "iPhoneTest", "") == 0, "concurrent join");
++            retro_azahar_room_leave(); retro_azahar_room_leave();
++            Session::GameReady("replacement-game");
++            Check(!Session::Active(), "GameReady drains old worker");
++            Session::Shutdown();
++        }
++        reading = false; reader.join();
++        std::puts("PASS 100 concurrent snapshot/cancel/replace/shutdown/reinit cycles");
++        std::puts("PASS repeated stop/unload/init, all tests passed");
++        return 0;
++    } catch (const std::exception& e) {
++        std::fprintf(stderr, "FAIL: %s\n", e.what());
++        Session::Shutdown();
++        return 1;
++    }
++}
+diff --git a/tests/room_bridge/test_logging.cpp b/tests/room_bridge/test_logging.cpp
+new file mode 100644
+--- /dev/null
++++ b/tests/room_bridge/test_logging.cpp
+@@ -0,0 +1,12 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++// Test-only synchronous log sink. Network/Room/RoomMember/ENet are production code.
++#include <cstdio>
++#include "common/logging/log.h"
++#include "common/logging/backend.h"
++namespace Common::Log {
++void Stop() {}
++void FmtLogMessageImpl(Class, Level, const char*, unsigned int, const char*,
++                       fmt::string_view format, const fmt::format_args& args) {
++    std::fprintf(stderr, "%s\n", fmt::vformat(format, args).c_str());
++}
++}

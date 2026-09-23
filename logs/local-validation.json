@@ -1,0 +1,172 @@
+{
+  "status": "success",
+  "scope": "local scripts/workflows only; no iOS or Actions run",
+  "unit_tests": 8,
+  "framework_all_files_unchanged": true,
+  "previous_A_A2_B_deliveries_unchanged": true,
+  "source_patches_unchanged": true,
+  "B_UI_delta_applies": true,
+  "source_change_this_turn": "CURRENT_STATE.md only; executable source unchanged",
+  "commands": [
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "-n",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\ci\\compile-core-ios.sh"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "-n",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\ci\\macos-preflight.sh"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "-n",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\ci\\package-framework.sh"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "-n",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\changes\\ManicEMU\\Scripts\\Room\\build-app.sh"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "-n",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\changes\\ManicEMU\\Scripts\\Room\\build-core-ios.sh"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "-n",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\changes\\ManicEMU\\Scripts\\Room\\build-ui-only.sh"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "-n",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\changes\\ManicEMU\\Scripts\\Room\\build-unsigned-ipa.sh"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "-n",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\changes\\ManicEMU\\Scripts\\Room\\check-core-exports.sh"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "-n",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\changes\\ManicEMU\\Scripts\\Room\\check-experimental-core.sh"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "-n",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\changes\\ManicEMU\\Scripts\\Room\\package-unsigned.sh"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\actionlint\\actionlint.exe",
+        "-config-file",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\.github\\actionlint.yaml",
+        "-shellcheck=",
+        "-pyflakes=",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\.github\\workflows\\room-experiment.yml",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\.github\\workflows\\c-after-ui.yml"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Users\\yutas\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\ci\\test_ready.py",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\ManicEMU\\Cores\\azahar.libretro.framework\\azahar.libretro",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\b-investigation\\logs\\exports-trie.json"
+      ],
+      "exit": 0,
+      "output": "test_reject_failed_pending_stale_foreign_runs (__main__.GateTests.test_reject_failed_pending_stale_foreign_runs) ... ok\ntest_reject_forged_incompatible_attestation (__main__.GateTests.test_reject_forged_incompatible_attestation) ... ok\ntest_valid_B (__main__.GateTests.test_valid_B) ... ok\ntest_missing_adapters_or_room_rejected (__main__.MachOTests.test_missing_adapters_or_room_rejected) ... ok\ntest_non_system_dependency_and_reexport_rejected (__main__.MachOTests.test_non_system_dependency_and_reexport_rejected) ... ok\ntest_original_trie_matches_independently_verified_log (__main__.MachOTests.test_original_trie_matches_independently_verified_log) ... ok\ntest_synthetic_expected_contract (__main__.MachOTests.test_synthetic_expected_contract) ... ok\ntest_unsupported_apis_must_not_be_faked (__main__.MachOTests.test_unsupported_apis_must_not_be_faked) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 0.024s\n\nOK\n"
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\cmd\\git.exe",
+        "init",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-ready-patch-qur6ty2g"
+      ],
+      "exit": 0,
+      "output": "Initialized empty Git repository in C:/Users/yutas/Documents/Codex/2026-09-23/files-pasted-by-the-user-c/work/c-ready-patch-qur6ty2g/.git/\n"
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\cmd\\git.exe",
+        "-c",
+        "safe.directory=*",
+        "-C",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-ready-patch-qur6ty2g",
+        "apply",
+        "--check",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\patches\\B-ui-message-only.patch"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Program Files\\Git\\cmd\\git.exe",
+        "-c",
+        "safe.directory=*",
+        "-C",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-ready-patch-qur6ty2g",
+        "apply",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-ready\\patches\\B-ui-message-only.patch"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "argv": [
+        "C:\\Users\\yutas\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\b-investigation\\tools\\capture_state.py",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c",
+        "C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-after",
+        "C:\\Program Files\\Git\\cmd\\git.exe"
+      ],
+      "exit": 0,
+      "output": "warning: in the working copy of 'ManicEmu/ManicEmu.xcodeproj/project.pbxproj', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'configuration.c', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'ui/drivers/LibretroCore.m', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'ui/drivers/cocoa/LibretroCore.h', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'CMakeLists.txt', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/citra_libretro/CMakeLists.txt', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/citra_libretro/applets/swkbd_apple.cpp', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/citra_libretro/citra_libretro.cpp', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/citra_libretro/core_settings.cpp', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/citra_libretro/libretro.osx.def', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/common/file_util.cpp', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/common/logging/backend.h', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/core/cheats/cheats.cpp', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/core/hle/service/nwm/nwm_uds.cpp', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/network/room_member.cpp', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/network/room_member.h', LF will be replaced by CRLF the next time Git touches it\nCaptured framework, previous deliveries, and three repositories: C:\\Users\\yutas\\Documents\\Codex\\2026-09-23\\files-pasted-by-the-user-c\\work\\c-execution-after\n"
+    }
+  ]
+}

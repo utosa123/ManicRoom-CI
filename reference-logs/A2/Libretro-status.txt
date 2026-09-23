@@ -1,0 +1,5 @@
+ M configuration.c
+ M ui/drivers/LibretroCore.m
+ M ui/drivers/cocoa/LibretroCore.h
+?? pkg/apple/ManicEMU/AzaharCompatABI.h
+?? pkg/apple/ManicEMU/AzaharRoomABI.h

@@ -1,0 +1,1111 @@
+diff --git a/CURRENT_STATE.md b/CURRENT_STATE.md
+new file mode 100644
+--- /dev/null
++++ b/CURRENT_STATE.md
+@@ -0,0 +1,43 @@
++# 段階A2 現在状態（2026-09-23）
++
++元frameworkと段階A成果物は保護。固定公開sourceは別の実験用core。
++4 adapter実装、extension_version/CIA/remove_amiiboの3 APIは未対応。
++Windows CTest 2/2 PASS。iOS build/端末/ゲーム未検証。
++手動CI（Windows、A/B/C、candidate、API検査、unsigned IPA）をローカル作成済み、未push/未実行。
++現在の手順はdocs/azahar-room/BUILD_A2.md、仕様はCOMPATIBILITY_JA.mdとLIFECYCLE_A2.md。
++成果物はManicRoom-stageA2。次は非公開CI repositoryとActions実行可否の指定。
++
++---
++以下は段階Aの引継ぎ記録（保存）。現在の制限・手順は上記A2文書を優先。
++
++# CURRENT STATE — Manic Azahar Room
++
++更新：2026-09-23。段階Aの実験実装とWindows実通信テストを作成。**iOSアプリ/コアのフルビルド・IPA・実機通信は未完了。**
++
++## 最大の阻害要因
++
++Manic同梱Azaharの生成情報は`4523838e25be9c86696b7d684a136e09ed52de52` / branch `manic` / `4523838e2-dirty` / build `2026-09-08T03:09:53Z`。確認した公開reposから取得できない。対応コミットだけでなくdirty差分も必要。公開Daiuno master 03da4a3…は独自APIも異なるため同じコアではない。同梱frameworkは置換していない。
++
++## できているもの
++
++* Manicの専用Azahar Room項目と画面、old coreの未対応表示。
++* 既存active Libretro handleに対する動的C ABI呼出し。別Azahar libraryは追加していない。
++* 公開候補ソース上のRoomSession、Network lifecycle、async join/cancel/leave、state/error/participants、停止時cleanup。
++* 実Room/RoomMember/ENetを使ったWindowsテストと制御ENet fixture。Room参加/転送/失敗/キャンセル/再接続を検証。
++* Mac用コアbuild、export確認、署名前IPAスクリプト（いずれもmacOS未実行）。
++* docs/azahar-roomの調査・build・test・install手順。成果物zipには親/submodule/候補coreの3パッチとソース、ログ、provenance。
++
++## 実行していないもの
++
++Manic/modified Azaharフルbuild、Swift/Objective-C型検査、simulator、端末起動・回帰、PC→Manic LAN、ゲームUDS、妖怪交換/対戦/バスターズ、署名/インストール。段階CのiOSホスト機能未実装。参考forkのYW2 workaroundも未適用。
++
++## 次に行う順序
++
++1. 4523838e… + dirty差分の対応ソースと固定依存/ビルド情報を入手。
++2. Mac/Xcode環境を用意。対応ソースへRoom差分を移植し、既存Manic APIと描画/入力/JITの維持を確認。
++3. フルコア→framework→Manic→署名前IPAの順に実build。Swift/Objective-Cの未検出コンパイル問題、レイアウトもここで検証。
++4. PC非公開Roomと実機で段階Aの全ケースを確認。
++5. 段階Bで相手発見/通信開始/ゲーム操作を区別して試験。必要な場合だけYW2 workaroundを別最小差分として検討。
++6. A/Bが通った後、同じNetwork::Roomのprivate Create→自己Joinを使って段階Cを追加。前面ホスト運用。
++
++リモート変更・公開・有料契約はなし。秘密情報の入力は現段階では不要。成果物を通信完成版として配布しない。
+diff --git a/ManicEmu/ManicEmu.xcodeproj/project.pbxproj b/ManicEmu/ManicEmu.xcodeproj/project.pbxproj
+--- a/ManicEmu/ManicEmu.xcodeproj/project.pbxproj
++++ b/ManicEmu/ManicEmu.xcodeproj/project.pbxproj
+@@ -475,6 +475,7 @@
+ 		57909430303C7D9100A53656 /* FilesImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 577005542D3CC23A00762E8F /* FilesImporter.swift */; };
+ 		57909431303C7D9100A53656 /* ASSwitchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57BF5EC72FDB08F60073D318 /* ASSwitchView.swift */; };
+ 		57909432303C7D9100A53656 /* LibretroNetplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D9430B303029F300C06208 /* LibretroNetplayView.swift */; };
++		A2A400000000000000000002 /* AzaharRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A400000000000000000001 /* AzaharRoomView.swift */; };
+ 		57909433303C7D9100A53656 /* PS1.swift in Sources */ = {isa = PBXBuildFile; fileRef = 576A7DA72E3B4B1200008E35 /* PS1.swift */; };
+ 		57909434303C7D9100A53656 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57CCB3C72D6770C80036476B /* Settings.swift */; };
+ 		57909435303C7D9100A53656 /* MappingOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D942D6302F448900C06208 /* MappingOptionsView.swift */; };
+@@ -1413,7 +1414,9 @@
+ 		57D942E4302F72CE00C06208 /* CitraAdvancedSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D942E0302F72C100C06208 /* CitraAdvancedSettingView.swift */; };
+ 		57D942E5302F72CE00C06208 /* CitraAdvancedSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D942E0302F72C100C06208 /* CitraAdvancedSettingView.swift */; };
+ 		57D9430F303029FF00C06208 /* LibretroNetplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D9430B303029F300C06208 /* LibretroNetplayView.swift */; };
++		A2A400000000000000000003 /* AzaharRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A400000000000000000001 /* AzaharRoomView.swift */; };
+ 		57D94310303029FF00C06208 /* LibretroNetplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D9430B303029F300C06208 /* LibretroNetplayView.swift */; };
++		A2A400000000000000000004 /* AzaharRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A400000000000000000001 /* AzaharRoomView.swift */; };
+ 		57DA89132D82B0C20074052A /* SmartCodable in Frameworks */ = {isa = PBXBuildFile; productRef = 57DA89122D82B0C20074052A /* SmartCodable */; };
+ 		57DA89322D8328510074052A /* CKAccountStatusExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57DA89312D8328420074052A /* CKAccountStatusExtensions.swift */; };
+ 		57DC7FF52F52E931004B6FFD /* J2MEView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57DC7FF32F52E92B004B6FFD /* J2MEView.swift */; };
+@@ -6682,6 +6685,7 @@
+ 		57D942D6302F448900C06208 /* MappingOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MappingOptionsView.swift; sourceTree = "<group>"; };
+ 		57D942E0302F72C100C06208 /* CitraAdvancedSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CitraAdvancedSettingView.swift; sourceTree = "<group>"; };
+ 		57D9430B303029F300C06208 /* LibretroNetplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibretroNetplayView.swift; sourceTree = "<group>"; };
++		A2A400000000000000000001 /* AzaharRoomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AzaharRoomView.swift; sourceTree = "<group>"; };
+ 		57DA89312D8328420074052A /* CKAccountStatusExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CKAccountStatusExtensions.swift; sourceTree = "<group>"; };
+ 		57DC7FF32F52E92B004B6FFD /* J2MEView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = J2MEView.swift; sourceTree = "<group>"; };
+ 		57DC7FFB2F52EC38004B6FFD /* WeakScriptMessageHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeakScriptMessageHandler.swift; sourceTree = "<group>"; };
+@@ -7388,6 +7392,7 @@
+ 				572D027B2F87EC4D000BD6F4 /* NimbusCollectionCell.swift */,
+ 				572D02832F87EC6B000BD6F4 /* PretendoHomeMenuCollectionCell.swift */,
+ 				57D9430B303029F300C06208 /* LibretroNetplayView.swift */,
++				A2A400000000000000000001 /* AzaharRoomView.swift */,
+ 			);
+ 			path = Views;
+ 			sourceTree = "<group>";
+@@ -14023,6 +14028,7 @@
+ 				57909430303C7D9100A53656 /* FilesImporter.swift in Sources */,
+ 				57909431303C7D9100A53656 /* ASSwitchView.swift in Sources */,
+ 				57909432303C7D9100A53656 /* LibretroNetplayView.swift in Sources */,
++				A2A400000000000000000002 /* AzaharRoomView.swift in Sources */,
+ 				57909433303C7D9100A53656 /* PS1.swift in Sources */,
+ 				57909434303C7D9100A53656 /* Settings.swift in Sources */,
+ 				57909435303C7D9100A53656 /* MappingOptionsView.swift in Sources */,
+@@ -14493,6 +14499,7 @@
+ 				57CDCE1B2FD5CBD3005BA4C8 /* FilesImporter.swift in Sources */,
+ 				57BF5ECB2FDB08FE0073D318 /* ASSwitchView.swift in Sources */,
+ 				57D9430F303029FF00C06208 /* LibretroNetplayView.swift in Sources */,
++				A2A400000000000000000003 /* AzaharRoomView.swift in Sources */,
+ 				57CDCE1D2FD5CBD3005BA4C8 /* PS1.swift in Sources */,
+ 				57CDCE1F2FD5CBD3005BA4C8 /* Settings.swift in Sources */,
+ 				57D942DA302F449200C06208 /* MappingOptionsView.swift in Sources */,
+@@ -14946,6 +14953,7 @@
+ 				577005552D3CC25700762E8F /* FilesImporter.swift in Sources */,
+ 				57BF5ECC2FDB08FE0073D318 /* ASSwitchView.swift in Sources */,
+ 				57D94310303029FF00C06208 /* LibretroNetplayView.swift in Sources */,
++				A2A400000000000000000004 /* AzaharRoomView.swift in Sources */,
+ 				576A7DA82E3B4B1400008E35 /* PS1.swift in Sources */,
+ 				57CCB3C82D6770CE0036476B /* Settings.swift in Sources */,
+ 				57D942DB302F449200C06208 /* MappingOptionsView.swift in Sources */,
+diff --git a/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift b/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift
+--- a/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift
++++ b/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift
+@@ -85,7 +85,8 @@
+          slowMotion,
+          ndsLidToggle,
+          editLink,
+-         skinButtonBinding
++         skinButtonBinding,
++         azaharRoom
+         
+     //When adding a new option, make sure to add it at the end; otherwise, it might affect the existing Prefference configurations
+     
+@@ -225,7 +226,7 @@
+                 .symbolImage(R.image.joycon_iconSymbols())
+         case .rewind:
+                 .symbolImage(R.image.rewind_iconSymbols())
+-        case .netplay:
++        case .netplay, .azaharRoom:
+                 .symbolImage(R.image.online_iconSymbols())
+         case .symbianDevice:
+                 .symbol(.candybarphone)
+@@ -376,6 +377,8 @@
+             R.string.localizable.deadZoneSetting()
+         case .rewind:
+             R.string.localizable.rewind()
++        case .azaharRoom:
++            "Azahar Room (3DS LAN)"
+         case .netplay:
+             R.string.localizable.netplay()
+         case .symbianDevice:
+@@ -443,6 +446,7 @@
+     }
+     
+     private static let disableOptionsForMultiGames: [Self] = [
++        .azaharRoom,
+         .rename,
+         .cover,
+         .editLink,
+@@ -550,6 +554,7 @@
+             .insertDisc,
+             .rewind,
+             .netplay,
++            .azaharRoom,
+             .reload,
+             .quit
+         ],
+@@ -919,6 +924,8 @@
+                 return .chevron(rewind ? R.string.localizable.on() : R.string.localizable.off())
+             }
+             
++        case .azaharRoom:
++            return .chevron(nil)
+         case .netplay:
+             if LibretroNetplaySession.shared.isHosting,
+                let connectedHost = LibretroNetplaySession.shared.connectedHost,
+@@ -1021,6 +1028,7 @@
+         switch scene {
+         case .common:
+             return [
++                .azaharRoom,
+                 .saveState,
+                 .quickLoadState,
+                 .screenShot,
+@@ -1290,6 +1298,15 @@
+             allOptions.remove(.rewind)
+         }
+         
++        if !game.isAzahar3DS || !PlayViewController.isGaming {
++            allOptions.remove(.azaharRoom)
++        }
++        if (Bundle.main.object(forInfoDictionaryKey: "ManicRoomBuildMode") as? String) == "experimental" {
++            allOptions.subtract([.saveState, .quickLoadState, .stateList, .fastForward, .rewind, .slowMotion, .cheatCode])
++        }
++        if LibretroCore.sharedInstance().azaharRoomActive() {
++            allOptions.subtract([.saveState, .quickLoadState, .stateList, .fastForward, .rewind, .slowMotion, .reload])
++        }
+         if !game.isLibretroType {
+             allOptions.remove(.netplay)
+         } else {
+diff --git a/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift b/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift
+--- a/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift
++++ b/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift
+@@ -1068,6 +1068,11 @@
+         case .rewind:
+             performSwitchAction(with: games)
+             
++        case .azaharRoom:
++            guard firstGame.isAzahar3DS, PlayViewController.isGaming else { return }
++            pauseEmulationIfNeed()
++            AzaharRoomView.showRoom(hideCompletion: { resumeEmulationIfNeed() })
++
+         case .netplay:
+             if PlayViewController.isGaming {
+                 pauseEmulationIfNeed()
+diff --git a/ManicEmu/ManicEmu/Sources/Business/OnlinePlay/Views/AzaharRoomView.swift b/ManicEmu/ManicEmu/Sources/Business/OnlinePlay/Views/AzaharRoomView.swift
+new file mode 100644
+--- /dev/null
++++ b/ManicEmu/ManicEmu/Sources/Business/OnlinePlay/Views/AzaharRoomView.swift
+@@ -0,0 +1,176 @@
++// SPDX-License-Identifier: AGPL-3.0-or-later
++import UIKit
++
++/// Direct Azahar Room transport. Separate from RetroArch's input-sync netplay.
++final class AzaharRoomView: BaseView {
++    private let host = UITextField()
++    private let port = UITextField()
++    private let nickname = UITextField()
++    private let password = UITextField()
++    private let status = UILabel()
++    private let members = UILabel()
++    private let join = UIButton(type: .system)
++    private let leave = UIButton(type: .system)
++    private var timer: Timer?
++    private var hideCompletion: (() -> Void)?
++    private var hidden = false
++    private var lastStatus: NSDictionary?
++
++    required init?(parameters: Any...) {
++        super.init(frame: .zero)
++        let navigation = ASNavigationView(.defaultNavigation(
++            title: "Azahar Room (3DS LAN)", titleIcon: .symbolImage(R.image.online_iconSymbols())))
++        navigation.didTapClose = { [weak self] in self?.hide() }
++        addSubview(navigation)
++        navigation.snp.makeConstraints { make in
++            make.top.equalToSuperview().offset(R.Size.SheetGrabberTopInset)
++            make.leading.trailing.equalToSuperview()
++            make.height.equalTo(R.Size.NavigationHeight)
++        }
++        let scroll = UIScrollView()
++        scroll.keyboardDismissMode = .interactive
++        addSubview(scroll)
++        scroll.snp.makeConstraints { make in
++            make.top.equalTo(navigation.snp.bottom)
++            make.leading.trailing.equalToSuperview()
++            make.bottom.equalTo(keyboardLayoutGuide.snp.top)
++        }
++        let stack = UIStackView()
++        stack.axis = .vertical
++        stack.spacing = 12
++        scroll.addSubview(stack)
++        stack.snp.makeConstraints { make in
++            make.edges.equalTo(scroll.contentLayoutGuide).inset(16)
++            make.width.equalTo(scroll.frameLayoutGuide).offset(-32)
++        }
++        let detail = UILabel()
++        detail.numberOfLines = 0
++        detail.font = .preferredFont(forTextStyle: .footnote)
++        detail.text = "同じWi-FiのPC Azaharルームへ接続します。参加後はこの画面を閉じてゲーム内のローカル通信を選んでください。バックグラウンド移行時は退出します。"
++        stack.addArrangedSubview(detail)
++        for (label, field) in [("ホスト IPv4", host), ("ポート", port),
++                               ("ニックネーム（半角4〜20文字）", nickname), ("パスワード（任意）", password)] {
++            let title = UILabel()
++            title.text = label
++            title.font = .preferredFont(forTextStyle: .subheadline)
++            stack.addArrangedSubview(title)
++            field.borderStyle = .roundedRect
++            field.autocorrectionType = .no
++            field.autocapitalizationType = .none
++            field.snp.makeConstraints { $0.height.greaterThanOrEqualTo(40) }
++            stack.addArrangedSubview(field)
++        }
++        host.keyboardType = .decimalPad
++        host.placeholder = "192.168.1.10"
++        port.keyboardType = .numberPad
++        nickname.keyboardType = .asciiCapable
++        nickname.text = "ManicPlayer"
++        password.isSecureTextEntry = true
++        password.textContentType = .password
++        join.setTitle("接続", for: .normal)
++        join.addTarget(self, action: #selector(connect), for: .touchUpInside)
++        leave.setTitle("キャンセル / 退出", for: .normal)
++        leave.addTarget(self, action: #selector(disconnect), for: .touchUpInside)
++        stack.addArrangedSubview(join)
++        stack.addArrangedSubview(leave)
++        status.numberOfLines = 0
++        status.font = .preferredFont(forTextStyle: .body)
++        members.numberOfLines = 0
++        members.font = .preferredFont(forTextStyle: .footnote)
++        stack.addArrangedSubview(status)
++        stack.addArrangedSubview(members)
++        let restrictions = UILabel()
++        restrictions.numberOfLines = 0
++        restrictions.font = .preferredFont(forTextStyle: .footnote)
++        restrictions.text = "公開候補コアは実験用です。チート・ステート・速度変更は無効、保存先はRoomExperiment-v1です。CIA導入は未対応です。通信中はステート操作・早送り・巻き戻し・スロー・リセットを制限します。退出後、速度と巻き戻しは必要に応じて設定し直してください。ルーム参加だけではゲーム内通信の成功を意味しません。"
++        stack.addArrangedSubview(restrictions)
++        refresh()
++        let poll = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.refresh() }
++        timer = poll
++        RunLoop.main.add(poll, forMode: .common)
++    }
++
++    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
++    deinit { timer?.invalidate() }
++
++    private func refresh() {
++        let info = LibretroCore.sharedInstance().azaharRoomStatus()
++        if let lastStatus, lastStatus.isEqual(info as NSDictionary) { return }
++        lastStatus = info as NSDictionary
++        let supported = info["supported"] as? Bool ?? false
++        let state = (info["state"] as? NSNumber)?.intValue ?? 0
++        let error = (info["error"] as? NSNumber)?.intValue ?? 0
++        if port.text?.isEmpty != false, let value = info["port"] as? NSNumber {
++            port.text = value.stringValue // Core supplies its DefaultRoomPort.
++        }
++        let active = (2...4).contains(state)
++        [host, port, nickname, password].forEach { $0.isEnabled = !active && supported }
++        join.isEnabled = supported && state == 1
++        leave.isEnabled = active && state != 4
++        let states = ["ゲームの起動待ち", "未接続", "接続中（参加未確定）", "ルーム参加済み", "退出処理中"]
++        if !supported {
++            status.text = "Room未対応です。旧コアでのUI検証ではこの表示が正常です。接続実験には別途検査した実験用コアが必要です。"
++        } else {
++            status.text = (states.indices.contains(Int(state)) ? states[Int(state)] : "不明な状態")
++            if error != 0 { status.text = (status.text ?? "") + "\n" + Self.errorText(error) + " (\(error))" }
++        }
++        let names = info["members"] as? [String] ?? []
++        members.text = names.isEmpty ? "参加者なし" : "参加者 (\(names.count))\n" + names.joined(separator: "\n")
++    }
++
++    @objc private func connect() {
++        endEditing(true)
++        guard let portValue = UInt(port.text ?? ""), (1...65535).contains(portValue) else {
++            status.text = "ポートは1〜65535で入力してください。"
++            return
++        }
++        let result = LibretroCore.sharedInstance().joinAzaharRoom(
++            host.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "", port: portValue,
++            nickname: nickname.text ?? "", password: password.text ?? "")
++        password.text = "" // Not persisted or logged.
++        if result == 0 { refresh() }
++        else { status.text = result == 1 ? "IPv4・ポート・ニックネームを確認してください。パスワードはUTF-8で128バイト以内です。" : "接続要求を受け付けられませんでした (\(result))。ゲーム起動とコアの対応状況を確認してください。" }
++    }
++
++    @objc private func disconnect() {
++        LibretroCore.sharedInstance().leaveAzaharRoom()
++        refresh()
++    }
++
++    private static func errorText(_ error: Int32) -> String {
++        switch error {
++        case 1: return "ホストまたはネットワークとの接続が切れました"
++        case 2: return "ホストから退出させられました"
++        case 4: return "ニックネームが使用中です"
++        case 5: return "MACアドレスが重複しています"
++        case 6: return "エミュレート本体IDが重複しています"
++        case 7: return "ルームの通信プロトコルが一致しません"
++        case 8: return "パスワードが違います"
++        case 9: return "接続先から応答がありません。IP・ポート・Wi-Fi・権限を確認してください"
++        case 10: return "ルームが満員です"
++        case 11: return "ホストから参加を拒否されています"
++        case 12: return "この操作の権限がありません"
++        case 13: return "対象の参加者が見つかりません"
++        case 101: return "ルーム参加応答がタイムアウトしました"
++        default: return "通信の初期化または処理に失敗しました"
++        }
++    }
++}
++
++extension AzaharRoomView: ShowableView {
++    static func showRoom(hideCompletion: (() -> Void)?) {
++        Self.show()?.hideCompletion = hideCompletion
++    }
++    func didHide() {
++        guard !hidden else { return }
++        hidden = true
++        timer?.invalidate()
++        timer = nil
++        password.text = ""
++        // Closing while joining cancels. Closing after Joined resumes local play.
++        let info = LibretroCore.sharedInstance().azaharRoomStatus()
++        if (info["state"] as? NSNumber)?.intValue == 2 { LibretroCore.sharedInstance().leaveAzaharRoom() }
++        hideCompletion?()
++        hideCompletion = nil
++    }
++}
+diff --git a/ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift b/ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift
+--- a/ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift
++++ b/ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift
+@@ -2993,7 +2993,10 @@
+                     customSaveDir = R.Path.ThreeDS
+                 }
+                 
+-                let vc = LibretroCore.sharedInstance().start(withCustomSaveDir: customSaveDir)
++                guard let vc = LibretroCore.sharedInstance().start(withCustomSaveDir: customSaveDir) else {
++                    UIView.makeToast(message: "エミュレータを開始できません。実行スレッドと保存先を確認してください。")
++                    return
++                }
+                 gameMetalView = vc.view
+                 guard let gameMetalView else { return }
+                 self.view.insertSubview(gameMetalView, belowSubview: controllerView)
+@@ -3020,11 +3023,13 @@
+                             guard let self else { return }
+                             LibretroCore.sharedInstance().registerAzaharKeyboard { [weak self] config in
+                                 guard let self else { return }
++                                let keyboardGeneration = LibretroCore.sharedInstance().azaharKeyboardGeneration()
+                                 self.pauseEmulationIfNeed()
+                                 ThreeDSKeyboardView.showForAzahar(config: config,
+                                                                   tapAction: { [weak self] buttonType, text in
+                                     guard let self else { return }
+                                     // Finalize while paused so the next frame sees DataReady.
++                                    guard keyboardGeneration == LibretroCore.sharedInstance().azaharKeyboardGeneration() else { return }
+                                     LibretroCore.sharedInstance().inputAzaharKeyboard(text, buttonType: buttonType)
+                                     self.resumeEmulationAndHandleAudio()
+                                 })
+diff --git a/Scripts/Room/build-app.sh b/Scripts/Room/build-app.sh
+new file mode 100644
+--- /dev/null
++++ b/Scripts/Room/build-app.sh
+@@ -0,0 +1,55 @@
++#!/bin/bash
++# A baseline, B UI-only original core, C isolated experimental core.
++# Root may be a pristine detached checkout for A; scripts need not be installed there.
++set -euo pipefail
++[[ "$(uname -s)" == Darwin && $# == 4 ]] || {
++  echo 'Usage (macOS): build-app.sh baseline|ui|experimental REPO NEW_OUTPUT BUNDLE_ID' >&2; exit 1;
++}
++mode="$1"; root="$(cd "$2" && pwd)"; out="$3"; bundle="$4"
++scripts="$(cd "$(dirname "$0")" && pwd)"
++case "$mode" in baseline|ui|experimental) ;; *) exit 1;; esac
++[[ "$bundle" == *.* && "$bundle" != com.aoshuang.manicemu && ! -e "$out" ]] || exit 1
++mkdir -p "$out"; out="$(cd "$out" && pwd)"
++exec > >(tee "$out/driver.log") 2>&1
++binary="$root/Cores/azahar.libretro.framework/azahar.libretro"
++original_sha=183159290d777d42a68c17f5f4d90d8b88f7aa0281e4788bad4e5954a6df940c
++if [[ "$mode" == experimental ]]; then
++  : "${MANIC_ORIGINAL_CORE:?Set to the protected original binary outside the staging checkout}"
++  [[ "$(shasum -a 256 "$MANIC_ORIGINAL_CORE" | awk '{print $1}')" == "$original_sha" ]]
++  bash "$scripts/check-experimental-core.sh" "$MANIC_ORIGINAL_CORE" "$binary"
++else
++  [[ "$(shasum -a 256 "$binary" | awk '{print $1}')" == "$original_sha" ]] || { echo 'Original core mismatch'; exit 1; }
++fi
++bash "$root/Scripts/VerifyLFS.sh"
++{
++  xcodebuild -version; xcrun --sdk iphoneos --show-sdk-version; xcrun swift --version
++  git -C "$root" rev-parse HEAD; git -C "$root" submodule status --recursive
++  df -h "$out"; env | grep -E '^(ImageOS|ImageVersion)=' || true
++} > "$out/build-environment.txt"
++git -C "$root" diff --binary > "$out/app.patch"
++git -C "$root/Dependencies/Libretro" diff --binary > "$out/libretro.patch"
++project="$root/ManicEmu/ManicEmu.xcodeproj"
++resolved="$project/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
++test -f "$resolved"
++cp "$resolved" "$out/Package.resolved.before"
++xcodebuild -resolvePackageDependencies -project "$project" -scheme ManicEmuSideload \
++  -onlyUsePackageVersionsFromResolvedFile -clonedSourcePackagesDirPath "$out/packages" 2>&1 | tee "$out/packages.log"
++cmp "$resolved" "$out/Package.resolved.before"
++xcodebuild -project "$project" -scheme ManicEmuSideload -configuration SideloadRelease \
++  -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$out/DerivedData" \
++  -clonedSourcePackagesDirPath "$out/packages" -disableAutomaticPackageResolution \
++  -archivePath "$out/ManicRoom.xcarchive" APP_BUNDLE_IDENTIFIER="$bundle" \
++  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' CODE_SIGN_ENTITLEMENTS='' \
++  DEVELOPMENT_TEAM='' archive 2>&1 | tee "$out/archive.log"
++app="$out/ManicRoom.xcarchive/Products/Applications/ManicEmuSideload.app"
++test -d "$app"
++case "$mode" in
++ baseline) label='Manic Baseline';;
++ ui) label='Manic UI・Room未対応';;
++ experimental) label='Manic Room 実験用';;
++esac
++/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $label" "$app/Info.plist"
++/usr/libexec/PlistBuddy -c "Add :ManicRoomBuildMode string $mode" "$app/Info.plist"
++printf '%s\n' "$mode" > "$out/build-mode.txt"
++printf '%s\n' "$label: unsigned; device, keyboard, JIT and game communication NOT VERIFIED" > "$out/NOTICE.txt"
++echo 'Archive complete. Generate IPA separately with package-unsigned.sh.'
+diff --git a/Scripts/Room/build-core-ios.sh b/Scripts/Room/build-core-ios.sh
+new file mode 100644
+--- /dev/null
++++ b/Scripts/Room/build-core-ios.sh
+@@ -0,0 +1,61 @@
++#!/bin/bash
++# Experimental source build. Does not replace Manic's bundled core.
++set -euo pipefail
++if [[ "$(uname -s)" != Darwin ]]; then echo 'macOS + Xcode are required.' >&2; exit 1; fi
++if [[ $# != 2 ]]; then echo "Usage: bash $0 AZAHAR_SOURCE NEW_OUTPUT_DIR" >&2; exit 1; fi
++src="$(cd "$1" && pwd)"
++out="$2"
++[[ ! -e "$out" ]] || { echo 'Use a new output directory.' >&2; exit 1; }
++mkdir -p "$out"
++out="$(cd "$out" && pwd)"
++{
++  xcodebuild -version
++  xcrun --sdk iphoneos --show-sdk-version
++  cmake --version
++  git -C "$src" rev-parse HEAD
++  git -C "$src" submodule status --recursive
++} > "$out/build-environment.txt"
++git -C "$src" diff --binary > "$out/core-working-tree.patch"
++tar -cf "$out/room-source.tar" -C "$src" src/citra_libretro/room_api.h \
++  src/citra_libretro/room_session.h src/citra_libretro/room_session.cpp \
++  src/citra_libretro/manic_compat.h src/citra_libretro/manic_compat.cpp
++# Flags follow the candidate fork's .github/workflows/libretro.yml iOS job.
++cmake -S "$src" -B "$out/build" -G Xcode \
++  -DENABLE_LIBRETRO=ON -DMANIC_ROOM_EXPERIMENT=ON -DIOS=ON -DCMAKE_SYSTEM_NAME=iOS \
++  -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 \
++  -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
++  -DCMAKE_C_FLAGS=-DIOS -DCMAKE_CXX_FLAGS=-DIOS \
++  -DCITRA_USE_PRECOMPILED_HEADERS=OFF -DENABLE_OPT=OFF \
++  -DENABLE_BUILTIN_KEYBLOB=OFF -DENABLE_TESTS=OFF \
++  -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$out/configure.log"
++cmake --build "$out/build" --target azahar_libretro --config Release --parallel 2 \
++  2>&1 | tee "$out/build.log"
++binary="$out/build/bin/Release/azahar_libretro.dylib"
++test -f "$binary"
++fw="$out/azahar.libretro.framework"
++mkdir "$fw"
++cp "$binary" "$fw/azahar.libretro"
++install_name_tool -id '@rpath/azahar.libretro.framework/azahar.libretro' "$fw/azahar.libretro"
++cat > "$fw/Info.plist" <<'PLIST'
++<?xml version="1.0" encoding="UTF-8"?>
++<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
++<plist version="1.0"><dict>
++<key>CFBundleExecutable</key><string>azahar.libretro</string>
++<key>CFBundleIdentifier</key><string>com.azahar.libretro</string>
++<key>CFBundleName</key><string>azahar.libretro</string>
++<key>CFBundlePackageType</key><string>FMWK</string>
++<key>CFBundleShortVersionString</key><string>1.0.0</string>
++<key>CFBundleVersion</key><string>1</string>
++<key>CFBundleSupportedPlatforms</key><array><string>iPhoneOS</string></array>
++<key>MinimumOSVersion</key><string>15.0</string>
++</dict></plist>
++PLIST
++xcrun nm -gU "$fw/azahar.libretro" | awk '{print $NF}' | sort -u > "$out/exports.txt"
++for symbol in api_version snapshot join leave; do
++  grep -qx "_retro_azahar_room_$symbol" "$out/exports.txt"
++done
++xcrun lipo -info "$fw/azahar.libretro" > "$out/architecture.txt"
++xcrun otool -L "$fw/azahar.libretro" > "$out/linked-libraries.txt"
++shasum -a 256 "$fw/azahar.libretro" > "$out/SHA256SUMS"
++echo "Experimental UNSIGNED framework: $fw"
++echo 'Not installed. Check source provenance, existing extension APIs, dependencies and device regression first.'
+diff --git a/Scripts/Room/build-ui-only.sh b/Scripts/Room/build-ui-only.sh
+new file mode 100644
+--- /dev/null
++++ b/Scripts/Room/build-ui-only.sh
+@@ -0,0 +1,6 @@
++#!/bin/bash
++set -euo pipefail
++[[ $# == 2 ]] || { echo 'Usage: build-ui-only.sh NEW_OUTPUT YOUR_BUNDLE_ID' >&2; exit 1; }
++scripts="$(cd "$(dirname "$0")" && pwd)"
++bash "$scripts/build-app.sh" ui "$scripts/../.." "$1" "$2"
++bash "$scripts/package-unsigned.sh" "$1"
+diff --git a/Scripts/Room/build-unsigned-ipa.sh b/Scripts/Room/build-unsigned-ipa.sh
+new file mode 100644
+--- /dev/null
++++ b/Scripts/Room/build-unsigned-ipa.sh
+@@ -0,0 +1,7 @@
++#!/bin/bash
++# C only. Use build-ui-only.sh for B; use a disposable checkout for C.
++set -euo pipefail
++[[ $# == 2 ]] || { echo 'Usage: build-unsigned-ipa.sh NEW_OUTPUT YOUR_BUNDLE_ID' >&2; exit 1; }
++scripts="$(cd "$(dirname "$0")" && pwd)"
++bash "$scripts/build-app.sh" experimental "$scripts/../.." "$1" "$2"
++bash "$scripts/package-unsigned.sh" "$1"
+diff --git a/Scripts/Room/check-core-exports.sh b/Scripts/Room/check-core-exports.sh
+new file mode 100644
+--- /dev/null
++++ b/Scripts/Room/check-core-exports.sh
+@@ -0,0 +1,18 @@
++#!/bin/bash
++set -euo pipefail
++if [[ $# != 2 ]]; then echo "Usage: bash $0 ORIGINAL_CORE_BINARY CANDIDATE_CORE_BINARY" >&2; exit 1; fi
++tmp="$(mktemp -d)"
++# Only files created in this invocation are removed.
++trap 'rm -f "$tmp/original" "$tmp/candidate" "$tmp/missing"; rmdir "$tmp"' EXIT
++xcrun nm -gU "$1" | awk '{print $NF}' | grep '^_retro_' | sort -u > "$tmp/original"
++xcrun nm -gU "$2" | awk '{print $NF}' | sort -u > "$tmp/candidate"
++comm -23 "$tmp/original" "$tmp/candidate" > "$tmp/missing"
++if [[ -s "$tmp/missing" ]]; then
++  echo 'Existing Manic core APIs are missing. Do not replace its framework:' >&2
++  cat "$tmp/missing" >&2
++  exit 1
++fi
++for symbol in api_version snapshot join leave; do
++  grep -qx "_retro_azahar_room_$symbol" "$tmp/candidate"
++done
++echo 'Export names pass; ABI semantics, core provenance, rendering/input/JIT and devices still require verification.'
+diff --git a/Scripts/Room/check-experimental-core.sh b/Scripts/Room/check-experimental-core.sh
+new file mode 100644
+--- /dev/null
++++ b/Scripts/Room/check-experimental-core.sh
+@@ -0,0 +1,24 @@
++#!/bin/bash
++# Explicit alternate-core contract. Does not claim original-core equivalence.
++set -euo pipefail
++[[ $# == 2 ]] || { echo 'Usage: check-experimental-core.sh ORIGINAL CANDIDATE' >&2; exit 1; }
++tmp="$(mktemp -d)"
++trap 'rm -f "$tmp/original" "$tmp/candidate" "$tmp/missing" "$tmp/expected"; rmdir "$tmp"' EXIT
++xcrun nm -gU "$1" | awk '{print $NF}' | grep '^_retro_' | sort -u > "$tmp/original"
++xcrun nm -gU "$2" | awk '{print $NF}' | sort -u > "$tmp/candidate"
++comm -23 "$tmp/original" "$tmp/candidate" > "$tmp/missing"
++# Deliberately unsupported: legacy version contract unknown, pre-init CIA
++# storage setup unverified, remove_amiibo has no frontend declaration/caller.
++# All other legacy exports remain mandatory.
++printf '%s\n' _retro_azahar_extension_version _retro_azahar_install_cia _retro_azahar_remove_amiibo | sort > "$tmp/expected"
++diff -u "$tmp/expected" "$tmp/missing"
++for symbol in api_version snapshot join leave; do
++  grep -qx "_retro_azahar_room_$symbol" "$tmp/candidate"
++done
++for symbol in set_keyboard_callback keyboard_input load_amiibo is_searching_amiibo; do
++  grep -qx "_retro_azahar_$symbol" "$tmp/candidate"
++done
++grep -qx _retro_manic_experiment_api_version "$tmp/candidate"
++[[ "$(xcrun lipo -archs "$2")" == arm64 ]]
++xcrun vtool -show-build "$2" | grep -q 'platform IOS'
++echo 'PASS experimental export/platform contract; NOT a drop-in replacement or device verification.'
+diff --git a/Scripts/Room/package-unsigned.sh b/Scripts/Room/package-unsigned.sh
+new file mode 100644
+--- /dev/null
++++ b/Scripts/Room/package-unsigned.sh
+@@ -0,0 +1,12 @@
++#!/bin/bash
++set -euo pipefail
++[[ $# == 1 && "$(uname -s)" == Darwin ]] || exit 1
++out="$(cd "$1" && pwd)"
++mode="$(cat "$out/build-mode.txt")"
++case "$mode" in baseline|ui|experimental) ;; *) exit 1;; esac
++app="$out/ManicRoom.xcarchive/Products/Applications/ManicEmuSideload.app"
++test -d "$app"; test ! -e "$out/Payload"
++mkdir "$out/Payload"; ditto "$app" "$out/Payload/ManicEmuSideload.app"
++(cd "$out" && /usr/bin/zip -qry "ManicRoom-${mode}-UNSIGNED.ipa" Payload)
++shasum -a 256 "$out/ManicRoom-${mode}-UNSIGNED.ipa" > "$out/IPA-SHA256SUMS"
++echo "UNSIGNED: $out/ManicRoom-${mode}-UNSIGNED.ipa"
+diff --git a/docs/azahar-room/ARCHITECTURE.md b/docs/azahar-room/ARCHITECTURE.md
+new file mode 100644
+--- /dev/null
++++ b/docs/azahar-room/ARCHITECTURE.md
+@@ -0,0 +1,113 @@
++> 段階Aの記録を保持しています。現行の追加実装・未対応範囲・実行手順は COMPATIBILITY_JA.md、BUILD_A2.md、LIFECYCLE_A2.md を優先してください。
++
++# Azahar Room 段階A：調査と実験実装
++
++調査日：2026-09-23。**iOSで動作確認済みの改造版ではない。段階Aは実装候補、B・Cは未完了。**
++
++## 固定したソース・環境
++
++|対象|確認結果|
++|---|---|
++|Manic|`Manic-EMU/ManicEMU` main `fbaeab79c214d5920bb51afa6f2d786fb2b12a58`|
++|Libretro依存|`Daiuno/RetroArch` `00689c83f4d458e061d5fd7b52a181b8d240fe65`。Manicのgitlinkに固定|
++|実験用Azaharソース|`Daiuno/azahar` master `03da4a354cc10012418c28a935dd0c627e37a963`|
++|比較した現行上流|`azahar-emu/azahar` master `b8c29a64c306bac3866a5ed293ebee94ef6dcb00`|
++|参考fork|`utosa123/azahar` `yw2-uds-worker-order-fix-v10` `d400c33b8a6b7b8301d62cb128cf208e0323bc6d`|
++|実行環境|Windows、Visual Studio 2022 Community / MSVC 19.44.35228.0、Windows SDK 10.0.26100.0|
++|使用したCMake|VS同梱 3.31.6-msvc6。PATH上のMSYS CMakeは4.0.2だが今回のビルドには不使用|
++|Git|2.49.0、Git LFS 3.7.1。MSYS Gitのsubmoduleスクリプト不具合を避け、取得後はWindows Gitを使用|
++|macOS / Xcode / Swift compiler|利用できる環境なし。接続済みMacも見つからず。Xcode/SDKの確認済み版はない|
++|実機・ゲームデータ|今回のテストでは使用していない。ROM・BIOS・鍵・セーブは取得・追加していない|
++
++新規の作業ディレクトリに既存リポジトリ・変更はなかった。祖先と取得したソース内にAGENTS.mdは見つからなかった。ManicのCONTRIBUTING.mdを確認。別タスクの既存記録は無関係なゲーム解析だったため変更しなかった。すべての変更はローカル。push、PR、Release、クラウドジョブ、署名は実行していない。
++
++## 最重要：同梱コアを再現するソースが不足している【確認済み】
++
++`Cores/azahar.libretro.framework/azahar.libretro` はLFS管理のMach-O arm64バイナリ（27,797,040 bytes）。SHA-256:
++
++`183159290d777d42a68c17f5f4d90d8b88f7aa0281e4788bad4e5954a6df940c`
++
++Mach-OのLC_SYMTABとセグメント配置から、`Common::g_scm_*`の実データを読み取った。
++
++* `g_scm_rev`: **4523838e25be9c86696b7d684a136e09ed52de52**
++* `g_scm_branch`: **manic**
++* `g_scm_desc`: **4523838e2-dirty**
++* `g_build_date`: **2026-09-08T03:09:53Z**
++* `g_build_fullname`: **4523838**
++
++`-dirty`は生成元に未コミット差分があったことを示す。コミットIDだけ入手しても同一ソースの再現には足りない。GitHub APIでこのコミットをDaiuno/azaharとazahar-emu/azaharに問い合わせた結果は422、Manic-EMU/azaharは404だった。確認した公開リポジトリからは対応ソースを取得できていない。
++
++実frameworkは`retro_azahar_extension_version`、`retro_azahar_set_keyboard_callback`等を公開する。公開fork masterのexport listは`retro_set_keyboard_callback`等の古い名前であり、同一ABIではない。2122ブランチはLibretro frontendを含まず、`warmenhoven/dev/azahar_libretro`も古いAPI名だった。別ソースを同梱コアと同一扱いしていない。今回の作業では同梱frameworkを変更・差し替えしていない。
++
++**必要な追加資料：4523838e… + dirty差分、固定submodule、実際のframework生成手順。** 未公開の独自変更を推測して置換することは、この成果物の範囲外。
++
++## Manicの構成【確認済み】
++
++* `ManicEmu/ManicEmu.xcodeproj/project.pbxproj`: Azahar frameworkはEmbed Frameworks。アプリビルド中にAzaharソースをコンパイルする構成ではない。Libretro frontend自身は`Dependencies/Libretro`のソースからビルドする。
++* `Sources/Tools/Cores/ThreeDS.swift`: `ThreeDS.isAzaharCore`でCitra専用bridgeと`AzaharEmulatorBridge`を切替。後者は`LibretroCore.sharedInstance()`へ入力を転送。
++* `Sources/Business/Play/VIewControllers/PlayViewController.swift`: コア選択、3DS設定、JIT設定、Libretro起動・停止を管理。
++* `Dependencies/Libretro/ui/drivers/LibretroCore.m`: `startWithCustomSaveDir:` → RetroArch起動、`stop` → callback解除とRetroArch停止。既存のkeyboard連携も`runloop_state_get_ptr()->lib_handle`に対して`dylib_proc`を使用する。
++* `Dependencies/Libretro/runloop.c`: 実際のcore libraryのロードとLibretro lifecycle。今回のbridgeもこのロード済みhandleだけを使う。アプリに別のnetwork静的ライブラリをリンクしない。
++* `EmulationCore.swift/supportNetplay`: Azaharは既存のRetroArch netplay対象外。`LibretroNetplayView.swift`は入力同期型の別機能で、Roomに流用していない。
++* `Resources/Info.plist`: `NSLocalNetworkUsageDescription`が既に存在。既存Bonjourは`_manicemu._tcp`と`_ra_netplay._tcp`。IPv4直接接続に新規Bonjour登録・multicast entitlement・ATS例外は追加していない。
++* JIT判定・StikJIT連携・描画/入力設定は既存コードを保持。新しいJIT有効化機能はない。
++* `.gitmodules`には8依存。今回取得したのはLibretroのみ。他のManic submoduleとSPM packageは未取得。LFSはAzahar frameworkの3ファイルだけ取得、他はpointerのまま。全コアの大量取得はしていない。
++* Windowsの長いパスによるcheckout欠落は新規リポジトリ単位の`core.longpaths=true`で修復。LFSのlocal設定で取得済みバイナリをソース差分から除外。
++* READMEにはXcode 16+と26+の両記載、CONTRIBUTINGには16+。projectのschemeはLastUpgradeVersion 2640、Swift language modeは5.0、iOS deployment targetは15.0。Swift 5.9+のREADME表現はcompiler要件とlanguage modeを区別する必要がある。今回Xcodeでは検証していない。
++
++## Azaharの経路【公開候補ソースで確認済み】
++
++`src/network/network.cpp`の`Network::Init()`がENetとグローバルRoom/RoomMemberを生成し、`Shutdown()`が終了する。Initは冪等ではないため重複呼出し不可。
++
++`src/core/hle/service/nwm/nwm_uds.cpp`はコンストラクタで`Network::GetRoomMember()`へWi-Fi受信callbackを登録し、デストラクタで解除する。ゲームの送信はNWM → `RoomMember::SendWifiPacket` → ENet → Room → 相手のRoomMember → NWM。このため、**NWM構築より前**にNetworkを初期化する必要がある。
++
++`src/CMakeLists.txt`はnetworkを追加、`src/core/CMakeLists.txt`はnetworkをリンクする。`ENABLE_ROOM=OFF`は専用サーバー実行ファイルの設定であり、組込みRoom/RoomMemberが無いことを意味しない。
++
++候補Libretro frontendの`retro_init`にNetwork初期化はなかった。Qtは`citra_qt.cpp`でInit/Shutdownし、`multiplayer/direct_connect.cpp`は別スレッドでJoin、状態callbackで結果を受ける。`host_room.cpp`はRoomをCreateしてホスト自身がJoinする。候補の古いAndroidにはemu_windowでのInitだけを確認した。現行上流のAndroid `jni/multiplayer.cpp`にはNetworkInit/Shutdown、NetPlayJoinRoom、NetPlayCreateRoomがある。後者はRoom作成後に同じRoomMemberで自己参加する。固定時間待機による判定は今回移植していない。
++
++候補と現行上流の`network/room.h`はともにprotocol **4**、default UDP port **24872**。この一致は通信互換性の必要な手掛かりだが、PC版との実接続やNWM/ゲーム互換性の保証ではない。同梱dirtyコア内部のプロトコルはこのソース比較だけでは確定できない。
++
++## 今回追加した経路【実装済み・iOS未検証】
++
++```text
++Azahar専用ゲームメニュー → AzaharRoomView
++  → LibretroCore（main thread、active lib_handleを毎回確認）
++  → versioned C ABI（同じazahar framework内部）
++  → RoomSession worker → 既存Network::GetRoomMember()
++                           ↑ ゲームNWMも同じshared instance
++```
++
++* ABI 1は固定幅整数・caller-owned snapshot bufferのみ。文字列は同期的にコピーし、境界にstd::string/クラス/callbackを出さない。APIは例外を外へ流さない。export listとdefault visibilityを追加。
++* query/versionはcoreを初期化しない。旧コアにはシンボルがなく「未対応」。`dlopen`で別インスタンスを作らない。
++* `retro_init`でNetworkを既存インスタンスがない場合のみInit。自分が所有した場合だけShutdown。
++* ゲームのLoad成功後、emulation側でCFG console ID hashとMACを採取。worker側からSystemへアクセスせず、PC frontend同様にCFG MACをJoinへ渡す。
++* Join戻り値0は受付だけ。snapshotはJoining、実際のJoined/Moderator callbackでのみJoinedになる。
++* 状態・error・参加者名をmutex付きsnapshotへコピー。参加者の参照getterはMemberLoop内のroom callbackからしか読まない。UIはmain runloopで250msごとにコピーを取得。アプリへの非同期callbackは存在しない。
++* IPv4 literal・1..65535・nickname `[A-Za-z0-9._ -]{4,20}`・password UTF-8 128 byte以内を検証。hostname/IPv6は今回対象外。passwordはログ・設定へ保存しない。
++* Joinのtransport待機を25ms単位でキャンセル可能にし、失敗直後・loop thread未生成時にもLeaveできるよう修正。退出はworkerでsocket/threadを解放。既存呼出し向けの通常Leaveは維持し、bridgeだけimmediateモードを使う。
++* transport接続後も10秒以内にJoinSuccessが来なければerror 101。通常のtransport接続待機は既存の5秒。
++* ゲーム停止ではworkerをdrain → System ShutdownでNWM解除 → Network Shutdownの順。ライブラリを閉じる前にcallback・threadを解放。
++* `NWM_UDS::GetMacAddress`はJoiningを接続完了とみなさず、Joined/ModeratorまでCFG MACを使う小修正を追加。これは未割当MACの読取り防止で、下記YW2 workaroundとは別。
++* 接続中に画面を閉じるとキャンセル。参加後に閉じると接続を保ちゲーム再開。バックグラウンド通知では退出要求を送る。バックグラウンドホスト継続は想定しない。
++* 時間変更とステート操作をLibretro bridgeとcore側で制限。接続受付時に早送り・スロー・巻き戻しを解除。設定ファイルを上書きせず、退出後の速度/巻き戻しはユーザーが必要に応じて再設定。
++* 状態ログは`AzaharRoom state=… error=… protocol=…`とNetworkの`Room bridge …`。秘密情報・endpoint・console IDを追加ログに出さない。
++
++## 妖怪ウォッチ2の参考fork【調査のみ・未適用】
++
++masterの上流差分はREADME変更だけ。通信修正は別ブランチにある。
++
++|コミット|変更内容|候補・現行上流|
++|---|---|---|
++|`8e16c580a8255b90d4ea97ea5fcba8d8d1bcec53`|NWM SetProbeResponseParam (0x0021)を成功応答stubにする|両方ともhandlerがnullptrで同等実装なし|
++|`5a8ac5daf69810d1d1735263bb887ac819ecb3b1`|真打title ID 0004000000155100のhost/client UDS workerを追跡。完了threadの特定PC/LRからのzero-timeout pollingに一度timeoutを返すworkaround|該当workaroundなし|
++|`d400c33b8a6b7b8301d62cb128cf208e0323bc6d`|v1.0のPC/LR条件を追加（v1.2条件も保持）|該当workaroundなし|
++
++変更対象はkernel.cpp/h、process.cpp、svc.cpp、nwm_uds.cpp/h。OS専用APIではないためiOSへ移植できる可能性はある【推測】が、ゲストコード位置・ゲーム版・JIT/実行順・セーブ互換に依存する。今回iOS適用/ビルド/ゲーム検証なし。同梱dirtyコアに同等修正があるかはソース不足で未確認。成功応答stubは実3DS機能の完全実装ではない。段階Bで止まる症状をログと再現条件で確認してから、別パッチとして検討する。
++
++## 主要根拠
++
++* [Manic固定コミット](https://github.com/Manic-EMU/ManicEMU/tree/fbaeab79c214d5920bb51afa6f2d786fb2b12a58)
++* [公開候補Azahar](https://github.com/Daiuno/azahar/tree/03da4a354cc10012418c28a935dd0c627e37a963)
++* [現行上流network](https://github.com/azahar-emu/azahar/blob/b8c29a64c306bac3866a5ed293ebee94ef6dcb00/src/network/room.h)
++* [現行上流Android](https://github.com/azahar-emu/azahar/blob/b8c29a64c306bac3866a5ed293ebee94ef6dcb00/src/android/app/src/main/jni/multiplayer.cpp)
++* [YW2修正ブランチ](https://github.com/utosa123/azahar/tree/d400c33b8a6b7b8301d62cb128cf208e0323bc6d)
+diff --git a/docs/azahar-room/BUILD.md b/docs/azahar-room/BUILD.md
+new file mode 100644
+--- /dev/null
++++ b/docs/azahar-room/BUILD.md
+@@ -0,0 +1,92 @@
++> 段階Aの記録を保持しています。現行の追加実装・未対応範囲・実行手順は COMPATIBILITY_JA.md、BUILD_A2.md、LIFECYCLE_A2.md を優先してください。
++
++# ビルド・引き継ぎ
++
++**生成済みIPAはない。** このリポジトリのアプリ差分、Libretro submodule差分、公開候補Azahar差分は別々に管理する。対応ソース不足を解消するまで、候補frameworkを既存Manicへそのまま差し替えない。
++
++## パッチの再現
++
++成果物zipの`patches/`には3つのパッチ。各README記載の固定コミットへチェックアウトしてから適用する。既存変更がある環境では新しい作業ツリーを使うか、`git apply --check`で確認する。以下は新規開発フォルダーでの例。
++
++```bash
++GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Manic-EMU/ManicEMU.git ManicEMU
++git -C ManicEMU checkout fbaeab79c214d5920bb51afa6f2d786fb2b12a58
++git -C ManicEMU submodule update --init --recursive
++git clone https://github.com/Daiuno/azahar.git azahar
++git -C azahar checkout 03da4a354cc10012418c28a935dd0c627e37a963
++git -C azahar submodule update --init --recursive
++
++# PATCH_DIRは解凍したpatchesディレクトリの絶対パス
++git -C ManicEMU apply --check "$PATCH_DIR/ManicEMU.patch"
++git -C ManicEMU/Dependencies/Libretro apply --check "$PATCH_DIR/Libretro.patch"
++git -C azahar apply --check "$PATCH_DIR/azahar-experimental.patch"
++git -C ManicEMU apply "$PATCH_DIR/ManicEMU.patch"
++git -C ManicEMU/Dependencies/Libretro apply "$PATCH_DIR/Libretro.patch"
++git -C azahar apply "$PATCH_DIR/azahar-experimental.patch"
++```
++
++Manicのgitlink自体は更新していない。依存の変更を親リポジトリだけで配布しないこと。対応するLibretro.patchも必ず含める。patchesにLFSバイナリやゲームデータは含めていない。
++
++## Windowsで実施済み：通信部分だけのビルド
++
++必要な候補依存は`externals/enet`、`externals/boost`、`externals/fmt`のみ。固定SHAはprovenance.json参照。
++
++```powershell
++git -C azahar submodule update --init --depth 1 externals/enet externals/boost externals/fmt
++$cmakeExe = 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
++$ctestExe = 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe'
++& $cmakeExe -S azahar/tests/room_bridge -B room-tests -G 'Visual Studio 17 2022'
++& $cmakeExe --build room-tests --config Release -j 4
++& $ctestExe --test-dir room-tests -C Release --output-on-failure
++```
++
++`room-tests/Release/room_bridge_tests.exe`はテスト実行ファイルでありエミュレータやIPAではない。loggerだけ同期テストsinkに差替え、Room/RoomMember/packet/Network/ENet/RoomSessionは実コードをコンパイルする。console identityはテスト専用値。core CFG/NWM全体のビルドは含まない。
++
++## macOSで次に実行する実験コアビルド（未実行）
++
++Mac、Xcode（上流の現在の案内に合わせ26系を候補とするが今回未検証）、iOS SDK、CMake 3.25以上、Git LFSと全固定submoduleが必要。`xcodebuild -version`、`xcrun --sdk iphoneos --show-sdk-version`の結果を必ず記録する。
++
++```bash
++bash ManicEMU/Scripts/Room/build-core-ios.sh "$PWD/azahar" "$PWD/artifacts/candidate-core"
++```
++
++上流候補のiOS workflowをもとにしたCMake/Xcodeコマンドをスクリプトに固定した。iOS arm64、deployment 15.0、Libretro、PCH OFF。ROM鍵blobを新たに含めないため`ENABLE_BUILTIN_KEYBLOB=OFF`。LTO後のexport存在を`nm`で確認する。コンパイル結果のdylibをframework化し、install nameを`@rpath/azahar.libretro.framework/azahar.libretro`に設定。署名しない。linked-libraries.txtで依存とrpathも点検する。
++
++候補の出力予定：`artifacts/candidate-core/azahar.libretro.framework`、configure.log、build.log、環境情報、export、SHA256。**今回は未生成。** upstreamソースの既存ビルド問題が判明した場合はログを残して修正する。Windows実通信ビルドをiOSビルド成功と扱わない。
++
++## 正しいコアの差し替え条件
++
++1. 同梱バイナリに対応する`manic`ブランチ4523838e…とdirty差分を入手する。
++2. そのソースへRoom API/lifecycle変更を移植。独自keyboard、amiibo、CIA、layout、JIT等を保持。今回の候補パッチは自動適用できる保証がない。
++3. 全固定依存とframework生成手順を記録し、Macでビルドする。
++4. originalとcandidateの公開API名を検査する。
++
++```bash
++bash ManicEMU/Scripts/Room/check-core-exports.sh \
++  ManicEMU/Cores/azahar.libretro.framework/azahar.libretro \
++  artifacts/candidate-core/azahar.libretro.framework/azahar.libretro
++```
++
++現在の公開候補は既存の7つの`retro_azahar_*` APIが不足するため、この条件を満たさない見込み（export list静的比較で確認）。名前が一致してもABIの意味まで同じとは限らない。frameworkを元の保存先へ置く作業は、これらの確認とバックアップ後に行う。既存署名をコピーせず、自分のビルドを使用する。
++
++## Manicと署名前IPA（未実行）
++
++全依存、全LFS、SPM packageを用意する。既存Xcode build phaseのVerifyLFS --fixも依存取得を試みる。`Scripts/VerifyLFS.sh`は事前に実行する。Secretsをログに出さず、Cipher.swiftのサービス設定・必要機能を確認する。不要な外部サービスを使わないビルドの設定も別途Macで検証する。
++
++```bash
++git -C ManicEMU lfs pull
++bash ManicEMU/Scripts/VerifyLFS.sh
++# YOUR_BUNDLE_IDを自分用の別IDに置換。旧コアではpreflightが停止する。
++bash ManicEMU/Scripts/Room/build-unsigned-ipa.sh \
++  "$PWD/artifacts/ManicRoom" YOUR_BUNDLE_ID
++```
++
++実際のschemeは`ManicEmuSideload`、configurationは`SideloadRelease`。スクリプトは`CODE_SIGNING_ALLOWED=NO`でarchiveし、`Payload/ManicEmuSideload.app`をzip化する。Room APIを持たない旧コアはpreflightで拒否する。再署名ツール、証明書、Apple Accountをスクリプトに組み込んでいない。
++
++予定出力：`artifacts/ManicRoom/ManicRoom-unsigned.ipa`、`ManicRoom.xcarchive`、archive.log、packages.log、build-environment.txt、SHA256SUMS。**今回はいずれも未生成。** プロビジョニング・対応entitlement・署名を追加した署名後IPAは別生成物で、ハッシュも変わる。署名前IPAの生成はインストール成功・JIT成功・通信成功の証明ではない。
++
++## 変更前の実行結果
++
++Windowsで候補コア全体を`ENABLE_LIBRETRO=ON`、`ENABLE_TESTS=OFF`、`ENABLE_BUILTIN_KEYBLOB=OFF`、VS2022 generatorで構成したが、多数の未取得submodule（nihstro/dynarmic/cryptopp/MoltenVK関連等）のためconfigure失敗。これは変更前からの環境不足で、今回のRoom変更によるビルドエラーではない。Manicの変更前ビルドはXcodeなしのため未実行。
++
++通信だけのビルドではPCHなしで`common/logging/backend.h`の不足する`<string>` includeが判明し修正した。テストの最終結果はTESTS.mdと同梱ログを参照。
+diff --git a/docs/azahar-room/BUILD_A2.md b/docs/azahar-room/BUILD_A2.md
+new file mode 100644
+--- /dev/null
++++ b/docs/azahar-room/BUILD_A2.md
+@@ -0,0 +1,39 @@
++# 段階A2: 手動CIと独立ビルド
++
++この版はビルド準備済みのソース/パッチであり、ビルド成功済みのiOS版ではない。Windows試験、静的workflow検査だけ実行済み。macOS実行、署名、インストール、PC実機Room、ゲームは未実行。
++
++## 3種類のappと独立core
++
++| 経路 | source/core | 目的・表示 |
++|---|---|---|
++| A baseline | 固定Manic/Libretroの未変更checkout＋元framework | 元の構成のunsigned archive。表示Manic Baseline |
++| B ui | 今回のManic/Libretro patch＋元framework（SHA256固定検査） | Swift/ObjC compileと未対応時の動作。表示Manic UI・Room未対応、build-mode=ui |
++| C experimental | 今回patch＋固定公開候補からの別framework | Roomへの接続試行準備。表示Manic Room 実験用。専用保存先、cheat/state/時間操作制限 |
++
++build-app.shがarchive、package-unsigned.shがIPAを生成する。Bのbuild-ui-only.shはRoom symbolを要求しない。Cのbuild-unsigned-ipa.shはBへ迂回せず、別の元binaryをMANIC_ORIGINAL_COREで要求し、全てのRoom/独自契約検査を行う。通常置換用の旧check-core-exports.shは変更しておらず、候補は3 symbol不足で失敗する。
++
++元frameworkを手元で上書きしない。Cはci/install-experimental.pyが使い捨てsrc/ManicEMU内で元frameworkをoriginal/へ退避してからコピー。自分の保存データの移動・自動移行なし。将来署名時も元app ID・App Group・iCloud containerを流用しない。今回は署名secretも新規署名toolも不要。
++
++## GitHub Actionsの準備
++
++成果物ルートは**専用CIハーネス**として配置する構成。.github/workflows/room-experiment.yml、.github/actionlint.yaml、ci/、changes/、patches/、provenance.jsonを同じrepositoryのルートへ置く。Manic本体のルートへworkflowだけをコピーしても動かない。
++
++workflow_dispatchのみ。target=windows（初期値）/baseline/ui/core/allを選べる。allのCはWindows試験、candidate build、A/B両方の成功が必要。公開lobby/chat/host実装・YW2 workaroundは含まない。
++
++ジョブ/stepを分離: Windows real ENet transport試験、A/B archive、公開core iOS arm64、iOS arm64 keyboard layout compile、custom+Room export検査、C archive、unsigned IPA。失敗時もprepare/build/configure/SPM/testログをupload（7日保存）。binary artifactも7日保存。自動push/release/署名/deployなし。
++
++全sourceはcommit固定、submoduleはそのgitlink、SPMは既存Package.resolvedを強制して変更をcmpで拒否。patchは適用前git apply --check。Actionsは実在確認したcommit固定（logs/actions-pins.json）。macOSはmacos-26、Xcode 26.6の明示path、iphoneos SDKを記録、CMake 3.31.6をvenvへ固定。SDK・runner image・Python・compilerは実行時バージョンをログ化する。hosted image自体はimmutableではなく、Xcode pathが消えた場合は黙って代替しない。
++
++公式runner一覧にはmacos-26 arm64、Xcode 26.6、iPhoneOS 26.5 SDKがある。標準runnerは3 CPU/7 GB RAM/14 GB SSD。並列core buildを2に制限。現checkoutの未取得LFS pointerは337ファイル、合計532,825,241 bytes（元Azahar取得分等は別）。依存/SPM/build/archiveは別に容量を消費するので、prepare.pyはLFS二重保存＋8 GiBを最低余裕として見積もり、容量不足で停止する。成功時のピーク容量を実測したわけではない。大容量の有料runnerへ自動変更しない。
++
++出典: [公式runner仕様](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)、[公式macos-26イメージ](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)、[Actions料金・無料枠](https://docs.github.com/en/billing/concepts/product-billing/github-actions)。private repositoryの実行/保存は契約と残枠により課金対象になり得る。今回はpush・実行・公開・課金許可を確認できていないので**ローカル作成まで**。
++
++## 次の最小操作
++
++1. 利用する非公開GitHub repositoryと、Actions実行可否（無料枠/予算）を指定する。こちらから無断実行はしていない。
++2. 許可後、成果物ハーネスをそのrepositoryへ配置。まずtarget=uiでBをbuildし、ログを確認。元の構成の比較にはbaseline、公開core単独にはcoreを使う。
++3. A/B/coreを通したらallでCを生成。失敗時はログの最初のcompile/configure errorから直す。IPAが得られても未署名で、そのまま端末実行できない。
++4. 署名・installが可能になってから、新規実験appへ自分のROM/必要system data/通常saveの**バックアップコピー**を配置。候補はDocuments/RoomExperiment-v1/3DS配下。CIA導入は未対応。旧stateをコピーしない。自動同期や本番セーブを実験に使わない。
++5. オフライン起動・日本語キーボード・画面/タッチ/音声/JITを先に確認。その後PCの同じprotocol4 Roomへ同一LANでjoinし、最後にゲーム内通信を確認する。
++
++ローカルMacでもci/prepare.pyで新しいcheckoutを用意できる。macos-preflight.shはGITHUB_ENV/PATH前提なのでCI向け。手動ではXcode/CMakeを同じ版に合わせ、changes/ManicEMU/Scripts/Room/build-app.shを使う。
+diff --git a/docs/azahar-room/COMPATIBILITY_JA.md b/docs/azahar-room/COMPATIBILITY_JA.md
+new file mode 100644
+--- /dev/null
++++ b/docs/azahar-room/COMPATIBILITY_JA.md
+@@ -0,0 +1,53 @@
++# 公開候補コアの互換性調査（段階A2）
++
++2026-09-23。元コア対応ソースからの改修と、別の公開コアによる実験を分離する。以下の一致は呼び出し側と固定公開ソースの比較。非公開dirty差分や同梱バイナリ全体との意味的同一性は保証しない。
++
++固定点: Manic fbaeab79c214d5920bb51afa6f2d786fb2b12a58、Libretro 00689c83f4d458e061d5fd7b52a181b8d240fe65、Daiuno/azahar 03da4a354cc10012418c28a935dd0c627e37a963、libretro-common 5e54bdaed73d885d5f7dae0ca489c0c3f85ff268。最後の固定submoduleも取得して実ヘッダーを比較した。
++
++## 7 APIの対照表
++
++| Manic要求API | 実際の呼び出し元 | 期待型・構造体 | 公開候補の処理 | ABI差 | 動作差 | 互換処理 | 未確認事項・必要なテスト |
++|---|---|---|---|---|---|---|---|
++| retro_azahar_extension_version | 固定Manic/Libretro検索で呼出なし。元binary exportのみ | 宣言なし。名前から戻り値型も推定しない | なし | 契約不明 | 数値の意味も利用側も未発見 | 未実装・未export。retro_manic_experiment_api_version=1は今回定義した別契約 | メンテナーのheader/契約取得。将来call追加時に再審査 |
++| retro_azahar_set_keyboard_callback | PlayViewController起動完了→LibretroCore.registerAzaharKeyboard。stop時nil | void(callback(const config*))。C configは下表 | retro_set_keyboard_callback→AppleKeyboard登録 | 名称差。フィールド配置一致 | DefaultAppletsを置換。ロード完了後登録、次のretro_run以降で要求 | フィールド単位コピーの薄いadapter。ポインター再解釈はしない | iOS arm64、ゲーム中表示、停止直後の遅延callback、再ロード |
++| retro_azahar_keyboard_input | ThreeDSKeyboardView完了→LibretroCore.inputAzaharKeyboard | void(const char*, int)。UTF-8。NULL→空文字 | retro_keyboard_input→SubmitInput→Finalize | 名称差。int32 buttonの意味一致 | 同一エミュレーションスレッドが前提。公開版profanity filterはTODO | 登録callbackとbutton0〜2を確認して実処理へ転送。mainに正規化、世代違い回答を排除 | Single/Dual/Triple/None、Cancel、日本語・UTF-16長・空白・固定長・ゲーム検証callback |
++| retro_azahar_install_cia | PretendoNetworkingView→LibretroCore.installAzaharCIA。直接呼出はNimbus導入 | void(const char*)、成否なし、起動前に独立dylib_load | retro_install_cia→AM::InstallCIA(path,progress) | 引数は一致するが初期化契約が欠落 | 保存先未設定、既存Systemとの共存が不明。AM本体のInstallStatusが捨てられる | 未対応・未export。実験アプリはdylib_load前にalertで説明して中止。Bは既存経路 | 専用保存先＋成否API、電源OFF導入、暗号化/破損/中断、更新認識。単純別名は危険 |
++| retro_azahar_load_amiibo | LibretroCore.loadAmiibo→ui_cocoatouch.m | C bool(const char*)、ObjC BOOLへ値変換 | retro_load_amiibo→NFC_U::LoadAmiibo | C bool1 byte、名称差 | PoweredOn/nfc:u確認。原core内部は未確認 | NULL拒否して実処理転送、mainへ正規化 | 起動前false、検索中/外、無効ファイル、停止競合、実機タグ読取 |
++| retro_azahar_is_searching_amiibo | LibretroCore.isSearchingAmiibo→ui_cocoatouch.m | C bool(void) | retro_is_searching_amiibo→NFC_U::IsSearchingForAmiibos | C bool一致、名称差 | 電源OFFはfalse | 実処理転送。main外同期呼出はNOとログ | 検索開始/終了UI、ロード前後、再初期化 |
++| retro_azahar_remove_amiibo | 呼出なし、元binary exportあり | 公開側void(void)。Manic期待型は宣言なしで確定不能 | retro_remove_amiibo→NFC_U::RemoveAmiibo | 公開型を採用、元binary型は未確認 | 電源/NFCサービス確認 | 未対応・未export。公開側void(void)は確認できるが、元契約を確定できず、使用中のManic呼出もないため保留 | タグ読取後の取り外し、電源OFF、複数回 |
++
++## キーボード構造体、値と寿命
++
++Windows x64 MSVCで実ヘッダーと共有adapter headerを比較。sizeof=56、alignof=8、int=4、bool=1、pointer=8。iOS arm64では同じ値をstatic_assertするworkflowを用意したが、まだ実行していない。
++
++| フィールド | offsetof | 型 |
++|---|---:|---|
++| button_config / accept_mode | 0 / 4 | int |
++| multiline_mode | 8 | bool |
++| max_text_length / max_digits | 12 / 16 | int |
++| hint_text / button_text | 24 / 32 | const char* / const char** |
++| button_text_count | 40 | int |
++| prevent_digit / prevent_at / prevent_percent / prevent_backslash | 44 / 45 / 46 / 47 | bool |
++| prevent_profanity / enable_callback | 48 / 49 | bool |
++
++paddingは9〜11、20〜23、50〜55。Frontend::KeyboardConfig内部のu16とC ABIのintを混同しない。ObjC NS_ENUMはNSUInteger（arm64で8 byte）だがC構造体にはintを使い、値を変換する。
++
++ButtonConfigはSingle=0/Dual=1/Triple=2/None=3。AcceptedInputはAnything=0〜FixedLength=4。返すbuttonはSingle OK=0、Dual Cancel=0/OK=1、Triple Cancel=0/Forgot=1/OK=2、Noneは既存Manicどおり0。表示button_textはHLE由来の3要素（Cancel/Forgot/OK）。
++
++callback configはスタック、文字列/配列はAppleKeyboard所有。次のExecute/破棄までで、adapterはcallbackの戻りまでしか借用を保証しない。ObjCはmainへdispatchする前にNSString/NSArrayへ同期コピーする。入力UTF-8は関数内でstd::stringにコピー。公開版のFinalize/data_readyは非atomicなので、UIとemulationの同時呼出は禁止。ManicのCocoaTouch pumpはCFRunLoopGetMainで、今回このexecutorへ操作を正規化。登録解除・停止後のqueued表示と古いゲームの回答は世代で排除する。実機の全呼出経路を検証済みとはしない。
++
++## API名以外の機能差
++
++| 機能 | 確認した経路 | 実験版・残る確認 |
++|---|---|---|
++| 描画・配置 | SpecialCoreOptionのcitra_layout_option/custom_layout_config→core_settings→EmuWindow_LibRetro::UpdateLayout。GL/Vulkan/software | 上下画面、縦横回転、解像度、swap、MoltenVKを実機比較。名称一致では描画互換を保証しない |
++| 入力・タッチ | ThreeDS.swift AzaharEmulatorBridge→Libretro buttons/analog/touch→input_factory/emu_window | ボタン対応を確認。座標倍率・touch・controller実機試験が必要 |
++| 音声 | libretro_sink/SubmitAudio→RetroArch driver | sample rate、途切れ、復帰、microphoneは未検証 |
++| JIT/interpreter | Manicのcitra_use_cpu_jit→core_settings。Daiuno/dynarmic/oaknut gitlink | 実機JIT可否・JITなし性能は不明。新規署名/JITツールは作らない |
++| 更新データ | AM/NAND/SDMCのinstalled title→loader | CIA API未対応。自分のバックアップを実験用領域へコピーして認識確認。v1.2等を未確認で同一と扱わない |
++| 通常セーブ | Libretro save dir→ParseStorageOptions→FileUtil→NAND/SDMC | Documents/RoomExperiment-v1/3DS。専用pathでなければLoad拒否。自動移動なし。形式互換はタイトル単位で別途試験 |
++| ステート | 元と候補でserialization/build IDが異なる | 実験版size=0、save/load=false。UIも除外。互換でないstateを読み込まない |
++| チート | retro_cheat_*は空だがThreeDS.setupCheats→CitraCheatsManager→ファイル、候補System::Load→LoadCheatFile→RunCallbackの別経路あり | MANIC_ROOM_EXPERIMENTで実行loopを無効化しUIも除外。既存機能維持とは主張しない |
++| 速度・巻き戻し | LibretroCore既存操作 | 実験アプリで常時制限。Room参加時も通常速度へ戻す |
++
++元コア互換検査check-core-exports.shは厳格なまま残した。候補は合格しない。別契約check-experimental-core.shは「欠落が上記3 APIのみ」、他の旧export全て、4 adapter、4 Room API、別の実験API、iOS arm64を必須にする。輸出名検査は動作試験の代用ではない。
+diff --git a/docs/azahar-room/INSTALL.md b/docs/azahar-room/INSTALL.md
+new file mode 100644
+--- /dev/null
++++ b/docs/azahar-room/INSTALL.md
+@@ -0,0 +1,25 @@
++> 段階Aの記録を保持しています。現行の追加実装・未対応範囲・実行手順は COMPATIBILITY_JA.md、BUILD_A2.md、LIFECYCLE_A2.md を優先してください。
++
++# 配布・導入方針（生成物未作成）
++
++現在、配布可能なIPAは生成していない。この文書はビルドが成立した後の手順区分であり、特定の署名ツールやiOS版の動作保証ではない。
++
++1. **IPA入手**：対応ソース、変更差分、ビルド情報、ハッシュを添付した署名前IPAを利用者へ渡す。ROM/BIOS/鍵/利用者セーブは新たに同梱しない。元の著作権・LICENSE/THIRD_PARTY_NOTICESを保持。
++2. **署名**：利用者自身が選んだ外部ツールと本人の資格情報で署名する。Manicに署名ツールを組み込まない。開発者がApple Account、秘密鍵、pairing fileを収集・保管しない。
++3. **インストール**：署名後に端末へ導入。署名前と署名後のIPAは異なる生成物として保管する。起動できたことを別に確認する。
++4. **署名更新**：選択した方式の有効期限・更新条件に従う。今回ツール別の最新条件は調査・検証していないため、具体的な期限や完全PC不要対応を断定しない。
++5. **pairing file**：採用したインストール/JIT方式が必要とする場合のみ、端末ごとに利用者が管理する。1人分のファイルを他人と共有する前提にしない。
++6. **JIT**：インストールと別条件。Manicの既存JIT経路を使い、対象iOS/端末で確認する。未確認の新規ツールや証明書検証回避は追加しない。
++7. **ゲーム内通信**：インストール・JITとは別テスト。TESTS.mdのRoom→参加者→発見→ゲームセッション→実操作を実施する。
++
++SideInstaller / SideStore / ESignなどの最新対応表や個別導入案内は今回作成していない。必要になった時点で利用者が選んだツールの公式README/Releaseと実機条件を確認する。外部ツールのソースをManicへ取り込む必要はない。
++
++## 別アプリとしての併存
++
++`Resources/Config-Base.xcconfig`の既定`APP_BUNDLE_IDENTIFIER`は`com.aoshuang.manicemu`。build-unsigned-ipa.shは自分用の別IDを必須とする。単にBundle IDを変えるだけでは、hard-codeされたApp Group `group.aoshuang.manicemu`やiCloud `iCloud.com.aoshuang.manicemu`を利用できるとは限らない。署名方式に合わせ、entitlementと関連コード・サービス設定を確認する。CloudKit/App Groups等を必要なくする設定はMacで別途検証する。
++
++通常の保存先は`Constants.swift/R.Path.Document`下の`Datas`、`3DS`等。別Bundle IDではsandboxが分かれ、公式版セーブが自動的に現れるとは想定しない。同一Bundle IDでも署名者/導入方式によって上書き可否が変わるため保証しない。
++
++**移行前に公式版の共有/エクスポート機能（GameOption.shareSave → ShareManager）でゲーム内セーブをバックアップ**し、元アプリを保持して別IDへインポートして確認する。3DSの保存構造と本体IDに注意し、異なるコア版のステートだけを唯一のバックアップにしない。共有App Group/iCloudを未検証の改造版へ向けて同時同期しない。実際の移行は今回未検証。
++
++Manic本体のAGPL-3.0、AzaharのGPL-2.0-or-later等、実際に配布する全コンポーネントのライセンスと対応ソースを保持する。今回の成果物はバイナリ再配布ではなくソース差分で、親リポジトリと変更したLibretro submoduleの両方を含む。
+diff --git a/docs/azahar-room/LIFECYCLE_A2.md b/docs/azahar-room/LIFECYCLE_A2.md
+new file mode 100644
+--- /dev/null
++++ b/docs/azahar-room/LIFECYCLE_A2.md
+@@ -0,0 +1,21 @@
++# Room・bridge追加確認
++
++## 具体的な呼出経路と修正
++
++* ui_cocoatouch.mのrarch_start_draw_observerはCFRunLoopGetMainへ登録し、rarch_draw_observer→runloop_iterate→retro_run。loadGame→task_push_load_content_with_new_core_from_menuは名前にtaskがあるが、確認した分岐はcommand_event(CMD_EVENT_LOAD_CORE)→content_loadを同期実行する。stopはobserver停止→CLOSE_CONTENT→UNLOAD_CORE→main_exit。
++* 旧LibretroCoreではmain以外のRoomStatusがunsupportedになり、azaharRoomActive=falseと解釈され、fastForward/save/load/reloadのガードをすり抜けられた。またstop→leaveがmain外で何もせず、その後unloadが続いた。今回void操作はmainへenqueue、同期bool/開始はmain外をログ付き拒否、Active照会はmain外で保守的にYES。RoomStatus自身はmain外でcoreを触らない。
++* これにより確認したManic経路のstatus→dlsym→snapshotとstop/switch→dylib_closeをmainで直列化。独立dlopen、関数ポインターキャッシュなし。今後LibretroCoreを経由しない新たな背景unloadを追加した場合は、この契約を満たす必要がある。iOS上の全スケジューリングを実測したとはしない。
++* Room workerはCFG hash/MACを値コピーで受け取り、Core::Systemを触らない。GameStoppedはcancel→worker join（worker内LeaveがMemberLoop join/ENet解放）を終えてからSystem Shutdown/NWM callback解除。最後にRoomSession callback解除→member解放→所有Network Shutdown。
++* 旧ShutdownはGameStoppedのロックを解放してから再取得し、その隙間のGameReady/Joinでworkerを作れた。今回は一つのapi_mutex区間でstop〜unbind。繰返しGameReadyも前workerをdrainしてから新readyへ移る。
++* callbackはsnapshot_mutexだけを取り、worker待ち中のapi_mutexを取りに行かない。snapshot読取はcaller bufferへのcopy。解除時MemberLoopが停止済みなので、callback内member参照を破棄しない。
++* keyboard callbackのstructとstringをborrowedのままdispatchしない。登録世代を保存し、停止後の遅延UIと旧画面からの回答を破棄。実際の入力Finalizeはmainの停止中に行い、次frameでDataReadyを読む。
++* startWithCustomSaveDirから渡すNSString.UTF8Stringをconfiguration.cがraw pointer保持していた。新しい一時NSStringで寿命切れが再現可能な経路になるため、C側固定bufferへコピーするよう修正。
++* FileUtil::GetUserPathによるdefault初期化→ParseStorageOptions::SetUserPathではg_paths.emplaceが既存NAND/SDMCを更新しなかった。実験profileで明示path設定時にmapを作り直し、Load前にも専用rootを確認する。
++
++## 実行した追加検査
++
++MSVC Releaseでroom_bridge_tests、keyboard_abi_layout、manic_adapter_compile（実adapter翻訳単位）をbuild。実ENet join、password rejection、2参加者、WiFi packet、退出/再接続/host消失、cancel、timeout、version不一致、JoinSuccessなしのtimeoutに加えて、snapshot別thread＋100回cancel/repeated GameReady/Shutdown/re-initを通した。
++
++これはネットワーク部品の試験。MSVCの成功をApple ABI検証やGPU/CPU/JIT/UDSゲームthreadとの結合試験とは扱わない。ThreadSanitizer、iOS AddressSanitizer、実エミュレーションとの結合試験は未実行。
++
++実機では次を記録する: ゲーム実行中のjoin/leave、join直後stop、core切替、poll中stop、100回連続cancel/re-init、background移行、キーボード表示中終了と再起動、controller等のmain外呼出、通常save再起動。hang/crash時はmain/Room worker/MemberLoopのstackを同時に保存。ゲーム内の通信を始める前に全て確認する。
+diff --git a/docs/azahar-room/SOURCE_RESEARCH_A2.md b/docs/azahar-room/SOURCE_RESEARCH_A2.md
+new file mode 100644
+--- /dev/null
++++ b/docs/azahar-room/SOURCE_RESEARCH_A2.md
+@@ -0,0 +1,24 @@
++# 同梱ソースの追加調査
++
++生成情報4523838e25be9c86696b7d684a136e09ed52de52 / manic / 4523838e2-dirty。stageAのMach-O調査とcommit取得結果を再利用。同じhash検索を反復していない。
++
++2026-09-23の公開GitHub REST API追加調査。生の応答はlogs/additional-source-research.json、additional-trees.json。
++
++| 場所 | 範囲・結果 |
++|---|---|
++| Daiuno/azahar branches | 5件を再確認。manicなし |
++| 2120/2121系tree | 固定00e3bbb…/1277e84…を追加取得。citra_libretro/manic専用pathなし。対応sourceの手掛かりなし |
++| Daiuno/azahar tags | 100件枠、実数16。2120-rc1〜2122.1。Manic向けtagなし。全tag全履歴の網羅探索ではない |
++| Daiuno/azahar PR/release | all PR100件枠、release20件枠、双方0件。添付sourceなし |
++| Manic releases | 20件枠、13件。assetはIPA。対応core source添付は識別できず。GitHub自動Source archiveはManic treeで、Azaharの対応sourceとは別 |
++| Manic PR | all100件枠、9件。#86 Artic Home UI、RomM、Dolphin、cheat separator等。対応source公開PRを一覧に発見できず。未公開/削除refは見えない |
++| Daiuno/libretro-common | azahar branch=固定gitlink5e54bdae…。include/libretro.hの旧6関数とkeyboard structを確認。extension_version契約なし |
++| 候補build・依存 | libretro.ymlのiOS/macOS、CMake、.gitmodulesを調査。Daiuno dynarmic/oaknutは固定gitlink。これらは4523838e core本体の代替ではない |
++
++結論は「この表とstageAで確認した公開場所では、同梱dirtyビルドに対応するsourceを見つけられなかった」。どこにも公開されていないとは断定しない。commitだけ入手できてもdirty変更が別途必要。
++
++問い合わせ草案（未投稿）:
++
++> ManicEMUのAzahar frameworkへprivate Room joinを加える実験をしています。元frameworkを保持し、Daiuno/azahar 03da4a3は別コアとして扱っています。同梱arm64 binaryからg_scm_rev=4523838e25be9c86696b7d684a136e09ed52de52、branch=manic、description=4523838e2-dirty、build_date=2026-09-08T03:09:53Zを確認しました。対応source（dirty差分含む）、submodule SHA、iOS build flags、libretro_azahar.hの場所を教えていただけますか。特にextension_versionの型/値の意味、CIA導入前の保存先初期化、keyboard/amiibo APIのthread契約を確認したいです。
++
++参照: [候補source](https://github.com/Daiuno/azahar/tree/03da4a354cc10012418c28a935dd0c627e37a963)、[Manic releases](https://github.com/Manic-EMU/ManicEMU/releases)、[Manic PR](https://github.com/Manic-EMU/ManicEMU/pulls?q=is%3Apr)、[固定header依存](https://github.com/Daiuno/libretro-common/tree/5e54bdaed73d885d5f7dae0ca489c0c3f85ff268)。
+diff --git a/docs/azahar-room/TESTS.md b/docs/azahar-room/TESTS.md
+new file mode 100644
+--- /dev/null
++++ b/docs/azahar-room/TESTS.md
+@@ -0,0 +1,72 @@
++> 段階Aの記録を保持しています。現行の追加実装・未対応範囲・実行手順は COMPATIBILITY_JA.md、BUILD_A2.md、LIFECYCLE_A2.md を優先してください。
++
++# テスト結果と実機チェックリスト
++
++日付：2026-09-23。実施済みはWindows x64の通信テスト。iPhone、iPad、macOS、simulatorでは一切実施していない。
++
++## 実施済み（成功）
++
++`tests/room_bridge`をMSVC ReleaseでビルドしCTestを実行。テストは`assert`をReleaseで消す方式ではなく、失敗時に例外で終了コード1を返す。
++
++* C ABI version、null snapshot、未初期化時の接続拒否。
++* Init二重呼出しで同じRoomMemberを維持。
++* IP不正、先頭ゼロ、IPv6（対象外）、port 0/65536、短いnickname、長過ぎるpasswordを拒否。
++* 実Roomサーバー（loopbackのみ）へのJoin、wrong passwordエラー。
++* 参加後にNetwork::GetRoomMemberが同一instance、CFG相当の指定MACを保持。
++* 実RoomMemberをもう1つ接続し、2人の参加者情報と実Wi-Fi payload `{1,2,3,4}`の転送を確認。
++* 接続中の重複Join拒否、退出、再接続、ホスト終了と切断理由。
++* 応答のないportへのJoinキャンセルが1秒未満、キャンセル後に再試行。
++* 応答のないportへの実5秒timeout、error 9。
++* ENet制御fixtureからversion mismatch応答を送信しerror 7確認。**実PC版のバージョン違い試験ではない。**
++* ENet transportだけ受け入れJoinSuccessを返さないfixtureで約10秒のhandshake timeout、error 101。
++* 停止中Joinのdrain、10回のstop/ready反復、shutdown/reinitialize。
++
++このWi-Fi payload試験はNWM/UDSのゲーム実行試験ではない。loggerはテスト専用同期sink、identityもテスト値。UI mockによる接続成功表示は使用していない。
++
++## 失敗・解決した事項
++
++* MSYS版gitのsubmodule script解決失敗 → Windows Gitで取得。
++* Windowsの長いファイル名で新規checkoutの一部が失敗 → 当該repoのcore.longpaths設定と欠落パスだけの復元。
++* 変更前コア全体のCMake configure → 未取得依存のため失敗、フルビルド未完了。
++* 通信部分の初回コンパイル → PCH非使用時のbackend.h `<string>`不足、修正後成功。
++* sandbox内のMSBuild → Windows SDK情報のアクセス拒否、通常環境で再実行し成功。
++
++## 未実施：完了条件
++
++|項目|状態|
++|---|---|
++|変更したAzaharフルコアのiOS/Windowsビルド|未実施（Windowsの変更前configureは失敗）|
++|Manicアプリbuild、Swift/Objective-C型検査|未実施（Xcodeなし）|
++|通常起動、描画、音声、入力、セーブ、JIT、通信しないプレイ|未実施|
++|PC Azaharホスト → Manic参加、参加者リスト|未実施|
++|実機上のIP/port不正、wrong password、timeout、version mismatch|未実施（通信単体の対応テストとは区別）|
++|実機のキャンセル、退出、再接続、ホスト断、Wi-Fi断、背景/復帰|未実施|
++|ゲーム内の相手発見|未実施|
++|ゲーム内セッション開始|未実施|
++|真打の妖怪交換|未実施|
++|真打の対戦|未実施|
++|真打のバスターズ|未実施|
++|通信終了後の通常プレイ・ゲーム内セーブ|未実施|
++|Manicホスト → PC／Manic参加、ホスト終了|未実施、段階C未実装|
++|IPA生成、署名、インストール、署名更新|未実施|
++
++## 正しいコアと実機ビルドが用意できた後の最小操作
++
++1. 両端のゲーム内セーブをエクスポートして保管。同じゲーム版/更新版を利用者が用意する。
++2. PC Azaharで非公開Roomを作成し、LAN IPv4、UDP port、passwordを確認。最初は同じWi-Fi。テストに伴うWindows firewall設定は利用者が確認する。
++3. ManicでAzaharコアを選んでゲームを起動。通常の描画・入力・音声をまず確認。
++4. ゲームメニューの「Azahar Room (3DS LAN)」を開く。未対応表示ならコアを確認してここで中止する。
++5. IP/port/別々のnickname/passwordを入力し接続。ローカルネットワーク許可を求められたら許可する。「接続中」では成功扱いにしない。
++6. **Room参加済み表示**と**PC参加者一覧**を別々に確認。画面を閉じてゲームを再開。
++7. ゲーム内でローカル通信を選択し、**相手発見→セッション開始→交換/対戦/バスターズ成立**を別々に記録する。
++8. 退出して再接続。その後ホスト終了、背景移行/復帰を試す。背景復帰後は手動再接続し、セッション継続を前提にしない。
++
++console ID collisionはnickname変更で解決する問題ではない。データ一式の複製による本体ID/MACの重複を確認し、むやみにセーブや設定を消さない。
++
++## 問題時に必要な情報
++
++Manic commit、コアcommitとdirty差分識別、framework SHA256、Room API version/protocol、PC Azaharのversion/commit、iOS/device、JIT有無、ゲーム版・更新版、LAN構成、操作時刻、どの段階で止まったか。
++
++Mac Console/Xcode device consoleの`AzaharRoom`、coreのNetwork/Service_NWMログ、PC側Room/NWMログを同じ時刻帯で揃える。state番号は0未準備/1未接続/2接続中/3参加済み/4退出中。errorはroom_api.hとUIのerrorText参照。参加が成功しゲームだけ失敗するなら、UDS command 0x001D/0x001E/0x0021とkernel waitの周辺を追う。
++
++password、Apple Account、秘密鍵、pairing file、ROM、セーブをログ提出へ含めない。既存上流のverbose logには他の識別情報が入る可能性があるため、共有前に確認する。

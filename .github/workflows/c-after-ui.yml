@@ -1,0 +1,123 @@
+name: C experimental core after successful B ui (manual, unsigned)
+on:
+  workflow_dispatch:
+    inputs:
+      b_run_id:
+        description: 'Successful room-experiment target=ui run ID on this exact commit'
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: c-after-ui-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify-B:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      B_RUN_ID: ${{ inputs.b_run_id }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - name: Verify actual successful B run on the same commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 ci/verify_b.py
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: B-ui-success
+          run-id: ${{ inputs.b_run_id }}
+          github-token: ${{ github.token }}
+          path: verified-B
+      - name: Verify B original core and ui archive attestation
+        run: python3 ci/verify_b.py verified-B/B-ui-success.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: B-verification-for-C
+          path: |
+            logs/
+            verified-B/
+          retention-days: 7
+  C:
+    needs: verify-B
+    runs-on: macos-26
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - name: Xcode SDK tools and disk inventory
+        run: bash ci/macos-preflight.sh
+      - name: Prepare pinned public candidate and A2 Room patches
+        run: python3 ci/prepare.py core
+      - name: Prepare changed Manic and protected original core
+        run: python3 ci/prepare.py experimental
+      - name: 1 Compile candidate iOS arm64 dylib
+        id: compile
+        run: bash ci/compile-core-ios.sh src/azahar core-out
+      - name: 2 Generate separate experimental framework
+        id: framework
+        run: bash ci/package-framework.sh core-out 2>&1 | tee logs/02-framework.log
+      - name: 3 Inspect actual Mach-O exports platform and dependencies
+        id: binary
+        run: |
+          python3 ci/inspect_core.py binary src/ManicEMU/Cores/azahar.libretro.framework/azahar.libretro core-out/azahar.libretro.framework/azahar.libretro logs/core-checks 2>&1 | tee logs/03-macho.log
+          xcrun otool -L core-out/azahar.libretro.framework/azahar.libretro > logs/dependencies-otool.txt
+      - name: 4 Verify custom adapter exports and iOS arm64 keyboard ABI
+        id: custom
+        run: |
+          python3 ci/inspect_core.py custom src/ManicEMU/Cores/azahar.libretro.framework/azahar.libretro core-out/azahar.libretro.framework/azahar.libretro logs/core-checks 2>&1 | tee logs/04-adapters.log
+          xcrun --sdk iphoneos clang++ -std=c++20 -target arm64-apple-ios15.0 -fsyntax-only \
+            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -Isrc/azahar/src -Isrc/azahar/externals/libretro-common/libretro-common/include \
+            src/azahar/tests/room_bridge/abi_layout.cpp 2>&1 | tee logs/keyboard-abi.txt
+      - name: 5 Verify Room exports and existing strict C preflight
+        id: room
+        run: |
+          python3 ci/inspect_core.py room src/ManicEMU/Cores/azahar.libretro.framework/azahar.libretro core-out/azahar.libretro.framework/azahar.libretro logs/core-checks 2>&1 | tee logs/05-room.log
+          bash changes/ManicEMU/Scripts/Room/check-experimental-core.sh src/ManicEMU/Cores/azahar.libretro.framework/azahar.libretro core-out/azahar.libretro.framework/azahar.libretro 2>&1 | tee logs/05-strict-preflight.log
+      - name: Stage C separately without moving or deleting original framework
+        run: python3 ci/install-experimental.py
+      - name: 6 Build C Manic with separate identity and storage
+        id: app
+        run: |
+          export MANIC_ORIGINAL_CORE="$PWD/src/ManicEMU/Cores/azahar.libretro.framework/azahar.libretro"
+          bash changes/ManicEMU/Scripts/Room/build-app.sh experimental stage-C/ManicEMU app-out local.manicroom.experimental
+      - name: 7 Generate unsigned C IPA
+        id: ipa
+        run: bash changes/ManicEMU/Scripts/Room/package-unsigned.sh app-out
+      - name: Record separate outcomes even after a failure
+        if: always()
+        env:
+          STEP_RESULTS: ${{ toJSON(steps) }}
+        run: python3 ci/record-stages.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: C-stage-logs
+          path: |
+            logs/
+            core-out/*.log
+            core-out/*.txt
+            core-out/*.patch
+            core-out/build/CMakeCache.txt
+            app-out/*.log
+            app-out/*.txt
+            app-out/*.patch
+            app-out/*resolved*
+            app-out/*SUMS
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: success()
+        with:
+          name: C-experimental-framework-and-unsigned-IPA
+          path: |
+            core-out/azahar.libretro.framework/
+            app-out/*.ipa
+          if-no-files-found: error
+          retention-days: 7

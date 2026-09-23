@@ -1,0 +1,10 @@
+Internal ctest changing into directory: C:/Users/yutas/Documents/Codex/2026-09-23/files-pasted-by-the-user-c/work/room-tests
+Test project C:/Users/yutas/Documents/Codex/2026-09-23/files-pasted-by-the-user-c/work/room-tests
+    Start 1: actual_enet_room_bridge
+1/2 Test #1: actual_enet_room_bridge ..........   Passed   15.94 sec
+    Start 2: keyboard_abi_layout
+2/2 Test #2: keyboard_abi_layout ..............   Passed    0.04 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =  15.98 sec

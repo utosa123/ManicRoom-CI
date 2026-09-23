@@ -1,0 +1,15 @@
+--- a/ManicEmu/ManicEmu/Sources/Business/OnlinePlay/Views/AzaharRoomView.swift
++++ b/ManicEmu/ManicEmu/Sources/Business/OnlinePlay/Views/AzaharRoomView.swift
+@@ -109,7 +109,11 @@
+         leave.isEnabled = active && state != 4
+         let states = ["ゲームの起動待ち", "未接続", "接続中（参加未確定）", "ルーム参加済み", "退出処理中"]
+         if !supported {
+-            status.text = "Room未対応です。旧コアでのUI検証ではこの表示が正常です。接続実験には別途検査した実験用コアが必要です。"
++            if Bundle.main.object(forInfoDictionaryKey: "ManicRoomBuildMode") as? String == "ui" {
++                status.text = "この元コアでは利用可能な入口を確認できないため、Room接続は無効です。UI検証用・Room未対応です。"
++            } else {
++                status.text = "実行中コアのRoom APIを確認できません。ゲーム起動前やAPIの取得失敗時も接続は無効です。元コアのUI検証用ビルドはRoom未対応です。"
++            }
+         } else {
+             status.text = (states.indices.contains(Int(state)) ? states[Int(state)] : "不明な状態")
+             if error != 0 { status.text = (status.text ?? "") + "\n" + Self.errorText(error) + " (\(error))" }

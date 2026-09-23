@@ -1,0 +1,18 @@
+ M CMakeLists.txt
+ M src/citra_libretro/CMakeLists.txt
+ M src/citra_libretro/applets/swkbd_apple.cpp
+ M src/citra_libretro/citra_libretro.cpp
+ M src/citra_libretro/core_settings.cpp
+ M src/citra_libretro/libretro.osx.def
+ M src/common/file_util.cpp
+ M src/common/logging/backend.h
+ M src/core/cheats/cheats.cpp
+ M src/core/hle/service/nwm/nwm_uds.cpp
+ M src/network/room_member.cpp
+ M src/network/room_member.h
+?? src/citra_libretro/manic_compat.cpp
+?? src/citra_libretro/manic_compat.h
+?? src/citra_libretro/room_api.h
+?? src/citra_libretro/room_session.cpp
+?? src/citra_libretro/room_session.h
+?? tests/

@@ -1,0 +1,4 @@
+# Lint-only addition for actionlint 1.7.7. This is a verified GitHub-hosted
+# label, absent from this older linter's table; it does not route a job.
+self-hosted-runner:
+  labels: [macos-26]

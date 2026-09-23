@@ -1,0 +1,494 @@
+Start testing: Sep 23 22:08 東京 (標準時)
+----------------------------------------------------------
+1/2 Testing: actual_enet_room_bridge
+1/2 Test: actual_enet_room_bridge
+Command: "C:/Users/yutas/Documents/Codex/2026-09-23/files-pasted-by-the-user-c/work/room-tests/Release/room_bridge_tests.exe"
+Directory: C:/Users/yutas/Documents/Codex/2026-09-23/files-pasted-by-the-user-c/work/room-tests
+"actual_enet_room_bridge" start time: Sep 23 22:08 東京 (標準時)
+Output:
+----------------------------------------------------------
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+Room bridge error=8
+Room bridge member state=2
+[127.0.0.1] iPhoneTest has joined.
+iPhoneTest is not playing
+Room bridge member state=3
+[127.0.0.1] DesktopTest has joined.
+DesktopTest is not playing
+[127.0.0.1] DesktopTest has left.
+Room bridge member state=1
+[127.0.0.1] iPhoneTest has left.
+Room bridge member state=2
+[127.0.0.1] iPhoneTest has joined.
+iPhoneTest is not playing
+Room bridge member state=3
+Room bridge member state=1
+Room bridge error=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge error=9
+Room bridge member state=2
+Room bridge member state=1
+Room bridge error=7
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+initialized OK
+Room bridge member state=2
+Room bridge member state=1
+shutdown OK
+PASS ABI, lifecycle, input validation
+PASS real room password rejection
+PASS actual join, membership, same instance, WiFi packet transport (not game UDS)
+PASS leave, rejoin, host close
+PASS cancel under 1s, reconnect after cancel, real timeout
+PASS controlled ENet fixtures: wrong-version error and missing JoinSuccess timeout
+PASS 100 concurrent snapshot/cancel/replace/shutdown/reinit cycles
+PASS repeated stop/unload/init, all tests passed
+<end of output>
+Test time =  15.94 sec
+----------------------------------------------------------
+Test Passed.
+"actual_enet_room_bridge" end time: Sep 23 22:09 東京 (標準時)
+"actual_enet_room_bridge" time elapsed: 00:00:15
+----------------------------------------------------------
+
+2/2 Testing: keyboard_abi_layout
+2/2 Test: keyboard_abi_layout
+Command: "C:/Users/yutas/Documents/Codex/2026-09-23/files-pasted-by-the-user-c/work/room-tests/Release/keyboard_abi_layout.exe"
+Directory: C:/Users/yutas/Documents/Codex/2026-09-23/files-pasted-by-the-user-c/work/room-tests
+"keyboard_abi_layout" start time: Sep 23 22:09 東京 (標準時)
+Output:
+----------------------------------------------------------
+PASS keyboard ABI: sizeof=56 align=8; all 14 offsets match real public header
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"keyboard_abi_layout" end time: Sep 23 22:09 東京 (標準時)
+"keyboard_abi_layout" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Sep 23 22:09 東京 (標準時)

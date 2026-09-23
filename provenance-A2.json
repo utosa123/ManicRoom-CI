@@ -1,0 +1,219 @@
+{
+  "date": "2026-09-23",
+  "status": "experimental source and CI preparation; NO iOS build/IPA/device validation",
+  "repositories": {
+    "ManicEMU": {
+      "commit": "fbaeab79c214d5920bb51afa6f2d786fb2b12a58",
+      "files": [
+        "CURRENT_STATE.md",
+        "ManicEmu/ManicEmu.xcodeproj/project.pbxproj",
+        "ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift",
+        "ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift",
+        "ManicEmu/ManicEmu/Sources/Business/OnlinePlay/Views/AzaharRoomView.swift",
+        "ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift",
+        "Scripts/Room/build-app.sh",
+        "Scripts/Room/build-core-ios.sh",
+        "Scripts/Room/build-ui-only.sh",
+        "Scripts/Room/build-unsigned-ipa.sh",
+        "Scripts/Room/check-core-exports.sh",
+        "Scripts/Room/check-experimental-core.sh",
+        "Scripts/Room/package-unsigned.sh",
+        "docs/azahar-room/ARCHITECTURE.md",
+        "docs/azahar-room/BUILD.md",
+        "docs/azahar-room/BUILD_A2.md",
+        "docs/azahar-room/COMPATIBILITY_JA.md",
+        "docs/azahar-room/INSTALL.md",
+        "docs/azahar-room/LIFECYCLE_A2.md",
+        "docs/azahar-room/SOURCE_RESEARCH_A2.md",
+        "docs/azahar-room/TESTS.md"
+      ],
+      "gitlinks": [
+        "160000 commit cf3caa6a3c953c3f8350f28e3048b434dc6adf16\tDependencies/CollectionViewPagingLayout",
+        "160000 commit 7d9ba12bcffb3f6350d7cd627617a897bd8a7b3f\tDependencies/DNSPageView",
+        "160000 commit a9ed6eb83913865a5613b666724ebd414c226eca\tDependencies/DeltaCore",
+        "160000 commit cf64427bd7faa2ee0efd4b98323a5bcbd81cc38a\tDependencies/IceCream",
+        "160000 commit 00689c83f4d458e061d5fd7b52a181b8d240fe65\tDependencies/Libretro",
+        "160000 commit bbded7047d8c594a024369c2f58b0238f4817e4c\tDependencies/ProHUD",
+        "160000 commit 84ef62522a7c002d018eebe76194f4cbc34dc305\tDependencies/SwiftCloudDrive",
+        "160000 commit 3623e725876f76aecb0520582ad6194bacb15d39\tStikJIT"
+      ],
+      "patch_sha256": "15166ef33263433bf1ac149cc4fa0ae738674649ec7095d30025a4218a2fc632"
+    },
+    "Libretro": {
+      "commit": "00689c83f4d458e061d5fd7b52a181b8d240fe65",
+      "files": [
+        "configuration.c",
+        "pkg/apple/ManicEMU/AzaharCompatABI.h",
+        "pkg/apple/ManicEMU/AzaharRoomABI.h",
+        "ui/drivers/LibretroCore.m",
+        "ui/drivers/cocoa/LibretroCore.h"
+      ],
+      "gitlinks": [],
+      "patch_sha256": "4389b8f59ea34f87a21760bccb4ba81b70b252a312b01d8f74f165d1b82f1942"
+    },
+    "azahar-experimental": {
+      "commit": "03da4a354cc10012418c28a935dd0c627e37a963",
+      "files": [
+        "CMakeLists.txt",
+        "src/citra_libretro/CMakeLists.txt",
+        "src/citra_libretro/applets/swkbd_apple.cpp",
+        "src/citra_libretro/citra_libretro.cpp",
+        "src/citra_libretro/core_settings.cpp",
+        "src/citra_libretro/libretro.osx.def",
+        "src/citra_libretro/manic_compat.cpp",
+        "src/citra_libretro/manic_compat.h",
+        "src/citra_libretro/room_api.h",
+        "src/citra_libretro/room_session.cpp",
+        "src/citra_libretro/room_session.h",
+        "src/common/file_util.cpp",
+        "src/common/logging/backend.h",
+        "src/core/cheats/cheats.cpp",
+        "src/core/hle/service/nwm/nwm_uds.cpp",
+        "src/network/room_member.cpp",
+        "src/network/room_member.h",
+        "tests/room_bridge/CMakeLists.txt",
+        "tests/room_bridge/abi_layout.cpp",
+        "tests/room_bridge/integration.cpp",
+        "tests/room_bridge/test_logging.cpp"
+      ],
+      "gitlinks": [
+        "160000 commit d9f1126e42b606d02ecc89b10cb9a336a3b2f5a3\tdist/compatibility_list",
+        "160000 commit 6a85c3100499e886e11c87a5c2109eedacea0a61\texternals/boost",
+        "160000 commit 914aeecfe23b1e16af6ea675a4fb5dbd5a5b8d0a\texternals/catch2",
+        "160000 commit 4a970bc302d671476122cbc6b43cc89fbf4a96ec\texternals/cpp-jwt",
+        "160000 commit 60f81a77e0c9a0e7ffc1ca1bc438ddfa2e43b78e\texternals/cryptopp",
+        "160000 commit 00a151f8489daaa32434ab1f340e6750793ddf0c\texternals/cryptopp-cmake",
+        "160000 commit 832fcf38e600bf80b4b728a3e0227403088d992c\texternals/cubeb",
+        "160000 commit c3ca8febc2457ab5c581604f3236a8a511fc2e45\texternals/dds-ktx",
+        "160000 commit cb50201fc09290cd078c7ab27917504491f7f96a\texternals/discord-rpc",
+        "160000 commit 247a83d9ac1b39899644547bab7b19c02d89daaf\texternals/dynarmic",
+        "160000 commit 2662c0de09e36f2a2030ccc2c528a3e4c9e8138a\texternals/enet",
+        "160000 commit 216f00e8ddba6f2c64caf481a04f1ddd78b93e78\texternals/faad2/faad2",
+        "160000 commit e424e3f2e607da02742f73db84873b8084fc714c\texternals/fmt",
+        "160000 commit fc9889c889561c5882e83819dcaffef5ed45529b\texternals/glslang",
+        "160000 commit 5cc5e2c24642513aaa5b19126aad42d0e4e0923e\texternals/inih/inih",
+        "160000 commit 8fae8ce254dfc1344527e05301e43f37dea2df80\texternals/libadrenotools",
+        "160000 commit 3b3e28dbe6d033395ce2967fa8030825e7b89de7\texternals/library-headers",
+        "160000 commit 88b8e41b71099fabc57813bc06d8bc1aba050a19\texternals/libressl",
+        "160000 commit 5e54bdaed73d885d5f7dae0ca489c0c3f85ff268\texternals/libretro-common/libretro-common",
+        "160000 commit d52e355daa09f17ce64819122cb067b8a2ee0d4b\texternals/libusb/libusb",
+        "160000 commit 6f729fbe658a40dfd993fa8b22bd612bb17cde5c\texternals/libyuv",
+        "160000 commit 0b1d9ccfc2093e5d6620cd9a11d03ee6ff6705f5\texternals/lodepng/lodepng",
+        "160000 commit f4d8659decbfe5d234f04134b5002b82dc515a44\texternals/nihstro",
+        "160000 commit f10857b892bb3e071886252b4245ed86ef3a7486\texternals/oaknut",
+        "160000 commit 90191edd20bb877c5cbddfdac7ec0fe49ad93727\texternals/openal-soft",
+        "160000 commit 5d249570393f7a37e037abf22cd6012a4cc56a71\texternals/sdl2/SDL",
+        "160000 commit 37d49d2aa4c0a62f872720d6e5f2eaf90b2c95fa\texternals/sirit/sirit",
+        "160000 commit 9ef8458d8561d9471dd20e9619e3be4cfe564796\texternals/soundtouch",
+        "160000 commit aa6cef192b8e693916eb713e7a9ccadf06062ceb\texternals/spirv-headers",
+        "160000 commit a62abcb402009b9ca5975e6167c09f237f630e0e\texternals/spirv-tools",
+        "160000 commit 3d697a18df504f4677b65129d9ab14c7c597e3eb\texternals/teakra",
+        "160000 commit c788c52156f3ef7bc7ab769cb03c110a53ac8fcb\texternals/vma",
+        "160000 commit 409c16be502e39fe70dd6fe2d9ad4842ef2c9a53\texternals/vulkan-headers",
+        "160000 commit 0d67fd1530016b7c56f3cd74b3fca920f4c3e2b4\texternals/xbyak",
+        "160000 commit e626a72bc2321cd320e953a0ccf1584cad60f363\texternals/xxHash",
+        "160000 commit f8745da6ff1ad1e7bab384bd1f9d742439278e99\texternals/zstd"
+      ],
+      "patch_sha256": "19a32cb5df00ae7a19590381ba202adf438b77378fd75137ca7fe6fa70e05580"
+    }
+  },
+  "patch_validation": {
+    "ManicEMU": "PASS: apply --check, apply, normalized exact comparison",
+    "Libretro": "PASS: apply --check, apply, normalized exact comparison",
+    "azahar-experimental": "PASS: apply --check, apply, normalized exact comparison"
+  },
+  "checks": {
+    "original_framework_sha256_unchanged": "183159290d777d42a68c17f5f4d90d8b88f7aa0281e4788bad4e5954a6df940c",
+    "ABI_headers_identical": true,
+    "candidate_source_missing_exports": [
+      "_retro_azahar_extension_version",
+      "_retro_azahar_install_cia",
+      "_retro_azahar_remove_amiibo"
+    ],
+    "ctest": "2/2 PASS, 15.98 s (Windows network + layout; not whole emulator)",
+    "adapter_translation_unit": "MSVC Release compile PASS (no core linkage)",
+    "bash_n": "PASS",
+    "actionlint": "PASS with macos-26 label from official docs",
+    "python_compile": "PASS",
+    "Swift_ObjC_compile": "NOT RUN",
+    "iOS_arm64_ABI": "NOT RUN",
+    "A_B_C_builds": "NOT RUN",
+    "unsigned_IPA": "NOT GENERATED",
+    "device_and_game": "NOT RUN"
+  },
+  "binary_inspection": {
+    "sha256": "183159290d777d42a68c17f5f4d90d8b88f7aa0281e4788bad4e5954a6df940c",
+    "size": 27797040,
+    "metadata": {
+      "__ZN6Common9g_scm_revE": "4523838e25be9c86696b7d684a136e09ed52de52",
+      "__ZN6Common12g_scm_branchE": "manic",
+      "__ZN6Common10g_scm_descE": "4523838e2-dirty",
+      "__ZN6Common12g_build_nameE": "",
+      "__ZN6Common12g_build_dateE": "2026-09-08T03:09:53Z",
+      "__ZN6Common16g_build_fullnameE": "4523838"
+    },
+    "retro_exports": [
+      "_retro_api_version",
+      "_retro_azahar_extension_version",
+      "_retro_azahar_install_cia",
+      "_retro_azahar_is_searching_amiibo",
+      "_retro_azahar_keyboard_input",
+      "_retro_azahar_load_amiibo",
+      "_retro_azahar_remove_amiibo",
+      "_retro_azahar_set_keyboard_callback",
+      "_retro_cheat_reset",
+      "_retro_cheat_set",
+      "_retro_deinit",
+      "_retro_get_memory_data",
+      "_retro_get_memory_size",
+      "_retro_get_region",
+      "_retro_get_system_av_info",
+      "_retro_get_system_info",
+      "_retro_init",
+      "_retro_load_game",
+      "_retro_load_game_special",
+      "_retro_reset",
+      "_retro_run",
+      "_retro_serialize",
+      "_retro_serialize_size",
+      "_retro_set_audio_sample",
+      "_retro_set_audio_sample_batch",
+      "_retro_set_controller_port_device",
+      "_retro_set_environment",
+      "_retro_set_input_poll",
+      "_retro_set_input_state",
+      "_retro_set_video_refresh",
+      "_retro_unload_game",
+      "_retro_unserialize"
+    ]
+  },
+  "supported_adapters": [
+    "set_keyboard_callback",
+    "keyboard_input",
+    "load_amiibo",
+    "is_searching_amiibo"
+  ],
+  "unsupported_original_apis": [
+    "extension_version",
+    "install_cia",
+    "remove_amiibo"
+  ],
+  "local_tools": {
+    "MSVC": "19.44.35228.0",
+    "SDK": "10.0.26100.0",
+    "CMake": "3.31.6-msvc6",
+    "actionlint": "1.7.7 (official macos-26 label allowlisted; shellcheck/pyflakes not run)"
+  },
+  "ci_tools": {
+    "Xcode": "26.6 path required",
+    "SDK": "logged at execution; hosted image currently lists iPhoneOS 26.5",
+    "CMake": "3.31.6",
+    "runner": "macos-26 / windows-2022; image version logged"
+  },
+  "remote_actions": {
+    "push": false,
+    "workflow_dispatch": false,
+    "publish": false,
+    "message_or_issue_post": false
+  }
+}

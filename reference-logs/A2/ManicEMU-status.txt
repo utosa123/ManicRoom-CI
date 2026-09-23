@@ -1,0 +1,9 @@
+ m Dependencies/Libretro
+ M ManicEmu/ManicEmu.xcodeproj/project.pbxproj
+ M ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift
+ M ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift
+ M ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift
+?? CURRENT_STATE.md
+?? ManicEmu/ManicEmu/Sources/Business/OnlinePlay/Views/AzaharRoomView.swift
+?? Scripts/Room/
+?? docs/azahar-room/

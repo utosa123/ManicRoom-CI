@@ -1,0 +1,94 @@
+name: Manic Room experiment (manual, unsigned)
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'First run ui. C is a separate workflow requiring this successful ui run.'
+        type: choice
+        default: windows
+        options: [windows, baseline, ui]
+permissions:
+  contents: read
+concurrency:
+  group: room-experiment-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  windows-transport:
+    if: inputs.target == 'windows'
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - name: Fixed source, four submodules, patch check
+        run: python ci/prepare.py windows
+      - name: Build isolated transport and ABI tests (no emulator)
+        shell: pwsh
+        run: |
+          cmake --version | Tee-Object logs/cmake-version.txt
+          cmake -S src/azahar/tests/room_bridge -B test-build -G 'Visual Studio 17 2022' -A x64 2>&1 | Tee-Object logs/configure.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build test-build --config Release --parallel 2 2>&1 | Tee-Object logs/build.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --test-dir test-build -C Release --output-on-failure 2>&1 | Tee-Object logs/ctest.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: windows-transport-logs
+          path: |
+            logs/
+            test-build/Testing/Temporary/
+            test-build/CMakeCache.txt
+          retention-days: 7
+  original-core-app:
+    if: inputs.target == 'baseline' || inputs.target == 'ui'
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: ${{ fromJSON(format('["{0}"]', inputs.target)) }}
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - name: Xcode, SDK, tools and space inventory
+        id: environment
+        run: bash ci/macos-preflight.sh
+      - name: Prepare A pristine or B UI patch with protected original core
+        id: prepare
+        run: python3 ci/prepare.py '${{ matrix.mode }}'
+      - name: Build app archive (original core, A or B)
+        id: archive
+        run: bash changes/ManicEMU/Scripts/Room/build-app.sh '${{ matrix.mode }}' src/ManicEMU app-out 'local.manicroom.${{ matrix.mode }}'
+      - name: Generate unsigned IPA separately
+        id: package
+        run: bash changes/ManicEMU/Scripts/Room/package-unsigned.sh app-out
+      - name: Record successful B archive and package (no communication claim)
+        if: inputs.target == 'ui' && matrix.mode == 'ui'
+        run: python3 ci/b-success.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: inputs.target == 'ui' && matrix.mode == 'ui'
+        with:
+          name: B-ui-success
+          path: logs/B-ui-success.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Save original and archive hashes even after failure
+        if: always() && matrix.mode == 'ui'
+        env:
+          B_STEP_RESULTS: ${{ toJSON(steps) }}
+        run: python3 ci/b-evidence.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: app-${{ matrix.mode }}-unsigned-and-logs
+          path: |
+            logs/
+            app-out/*.log
+            app-out/*.txt
+            app-out/*.patch
+            app-out/*resolved*
+            app-out/*SUMS
+            app-out/*.ipa
+          retention-days: 7

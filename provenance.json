@@ -1,0 +1,35 @@
+{
+  "status": "READY LOCALLY; no B/C iOS execution",
+  "source_revisions": {
+    "Manic": "fbaeab79c214d5920bb51afa6f2d786fb2b12a58",
+    "Libretro": "00689c83f4d458e061d5fd7b52a181b8d240fe65",
+    "candidate": "03da4a354cc10012418c28a935dd0c627e37a963"
+  },
+  "source_patch_sha256": {
+    "azahar-experimental.patch": "19a32cb5df00ae7a19590381ba202adf438b77378fd75137ca7fe6fa70e05580",
+    "B-ui-message-only.patch": "114d73c75b5a1f96213cda394bb3e747ff8fdf24765f4f69c153fca81b432026",
+    "Libretro.patch": "4389b8f59ea34f87a21760bccb4ba81b70b252a312b01d8f74f165d1b82f1942",
+    "ManicEMU.patch": "15166ef33263433bf1ac149cc4fa0ae738674649ec7095d30025a4218a2fc632"
+  },
+  "original_framework": {
+    "_CodeSignature/CodeResources": "dac51e8b85cd8a8e2d9099d96a9ef54617c60e68c4e0a7b5d815297b56482fb8",
+    "azahar.libretro": "183159290d777d42a68c17f5f4d90d8b88f7aa0281e4788bad4e5954a6df940c",
+    "Info.plist": "5cd67a895e4120a69ca53e253795cb01187e411ada090ee21f63962165015dda"
+  },
+  "protected_previous_archives": {
+    "ManicRoom-stageA.zip": "9106eb5f364e681043fd2b80adc3a2083f6a7a13cf3166b79636e7bede3b8d48",
+    "ManicRoom-stageA2.zip": "929d53779e189327546d54e0778be8c081c98a12ae56a41273b3d6f782a72490"
+  },
+  "workflows": [
+    "room-experiment.yml target=ui",
+    "c-after-ui.yml b_run_id (same commit)"
+  ],
+  "remote_push": false,
+  "workflow_dispatch": false,
+  "unsupported": [
+    "extension_version",
+    "install_cia",
+    "remove_amiibo"
+  ],
+  "validation": "logs/local-validation.json"
+}

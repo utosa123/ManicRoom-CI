@@ -1,0 +1,8 @@
+MSBuild のバージョン 17.14.51+25f168cee (.NET Framework)
+
+  manic_compat.cpp
+  manic_adapter_compile.vcxproj -> C:\Users\yutas\Documents\Codex\2026-09-23\files-pasted-by-the-user-c\work\room-tests\manic_adapter_compile.dir\Release\manic_adapter_compile.lib
+  enet.vcxproj -> C:\Users\yutas\Documents\Codex\2026-09-23\files-pasted-by-the-user-c\work\room-tests\enet\Release\enet.lib
+  keyboard_abi_layout.vcxproj -> C:\Users\yutas\Documents\Codex\2026-09-23\files-pasted-by-the-user-c\work\room-tests\Release\keyboard_abi_layout.exe
+  fmt.vcxproj -> C:\Users\yutas\Documents\Codex\2026-09-23\files-pasted-by-the-user-c\work\room-tests\fmt\Release\fmt.lib
+  room_bridge_tests.vcxproj -> C:\Users\yutas\Documents\Codex\2026-09-23\files-pasted-by-the-user-c\work\room-tests\Release\room_bridge_tests.exe

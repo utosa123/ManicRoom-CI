@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "11bd71901bbe5b1630ceea73d27597364c9af683",
+    "endpoint": "actions/checkout/commits/11bd71901bbe5b1630ceea73d27597364c9af683",
+    "message": "Prepare 4.2.2 Release (#1953)\n\n* Prepare 4.2.2 Release\n\n---------\n\nCo-authored-by: Josh Gross <joshmgross@github.com>",
+    "url": "https://github.com/actions/checkout/commit/11bd71901bbe5b1630ceea73d27597364c9af683"
+  },
+  {
+    "sha": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+    "endpoint": "actions/upload-artifact/commits/ea165f8d65b6e75b540449e92b4886f43607fa02",
+    "message": "Merge pull request #685 from salmanmkc/salmanmkc/3-new-upload-artifacts-release\n\nUpdate to use artifact 2.3.2 package & prepare for new upload-artifact release",
+    "url": "https://github.com/actions/upload-artifact/commit/ea165f8d65b6e75b540449e92b4886f43607fa02"
+  },
+  {
+    "sha": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "endpoint": "actions/download-artifact/commits/d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "message": "Merge pull request #404 from actions/robherley/v4.3.0\n\nPrep for v4.3.0 release",
+    "url": "https://github.com/actions/download-artifact/commit/d3f86a106a0bac45b974a628896c90dbdf5c8093"
+  },
+  {
+    "sha": "2e73acda8e6e1ba3271e46ed84ef517170564a9b",
+    "endpoint": "actions/runner-images/contents/images/macos/macos-26-arm64-Readme.md",
+    "message": null,
+    "url": "https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md"
+  }
+]

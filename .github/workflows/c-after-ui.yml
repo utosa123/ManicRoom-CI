@@ -68,6 +68,8 @@ jobs:
         run: |
           python3 ci/inspect_core.py binary src/ManicEMU/Cores/azahar.libretro.framework/azahar.libretro core-out/azahar.libretro.framework/azahar.libretro logs/core-checks 2>&1 | tee logs/03-macho.log
           xcrun otool -L core-out/azahar.libretro.framework/azahar.libretro > logs/dependencies-otool.txt
+          xcrun vtool -show-build core-out/azahar.libretro.framework/azahar.libretro > logs/core-build-platform.txt
+          xcrun otool -l core-out/azahar.libretro.framework/azahar.libretro > logs/core-load-commands.txt
       - name: 4 Verify custom adapter exports and iOS arm64 keyboard ABI
         id: custom
         run: |

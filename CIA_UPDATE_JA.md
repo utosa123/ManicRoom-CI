@@ -20,4 +20,4 @@ AMが仮NANDへ書くticketは外へ公開せず破棄する。公開候補のAp
 
 UIの成功にはTitle ID・raw TMD versionを表示し、再起動を指示する。raw versionをゲーム表示のVer.1.2と同じ数値だと扱わない。file path・save内容・鍵をログへ追加しない。CIでは著作物CIAやゲームを取得・生成・アップロードしない。
 
-ローカルWindowsの共有policy/ABI負例13件は成功。macOSでは同じ負例にsymlink拒否を加え、iOS arm64 C ABIのcompile、header一致、core export、strict preflight、Swift/ObjC compile/link/archive/packageを検査する。負例テストはエミュレータ全体や実CIA導入を実行するものではない。実行runと結果は別の最終報告で記録する。
+ローカルWindowsの共有policy/ABI検査14件は成功。macOSでは同じ検査にsymlink拒否を加え、iOS arm64 C ABIのcompile、header一致、core export、strict preflight、Swift/ObjC compile/link/archive/packageを検査する。テストの期待パスもcanonical化し、macOSの/var→/private/varを同一パスとして扱う。負例テストはエミュレータ全体や実CIA導入を実行するものではない。実行runと結果は別の最終報告で記録する。

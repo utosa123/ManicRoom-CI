@@ -22,7 +22,7 @@ int main() {
         auto destination=Directory((expected/"title/0004000e/12345678").generic_string()+"/");
         fs::create_directories(destination.parent_path());
         if(fs::exists(destination) || destination.filename()!="12345678") throw std::runtime_error("destination created before commit"); ++checks;
-        if(Root(expected,docs)!=expected) throw std::runtime_error("valid isolated root rejected"); ++checks;
+        if(Root(expected,docs)!=fs::weakly_canonical(expected)) throw std::runtime_error("valid isolated root rejected"); ++checks;
         Reject([&]{Root(docs/"3DS",docs);},MCIA_WRONG_ENVIRONMENT);
         Reject([&]{Root(sandbox/"Other/RoomExperiment-v1/3DS",docs);},MCIA_WRONG_ENVIRONMENT);
         Reject([&]{NoLinks(docs,"../outside");},MCIA_WRONG_ENVIRONMENT);

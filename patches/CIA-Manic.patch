@@ -1,0 +1,72 @@
+--- a/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift
++++ b/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift
+@@ -86,7 +86,8 @@
+          ndsLidToggle,
+          editLink,
+          skinButtonBinding,
+-         azaharRoom
++         azaharRoom,
++         experimentalUpdateCIA
+         
+     //When adding a new option, make sure to add it at the end; otherwise, it might affect the existing Prefference configurations
+     
+@@ -226,7 +227,7 @@
+                 .symbolImage(R.image.joycon_iconSymbols())
+         case .rewind:
+                 .symbolImage(R.image.rewind_iconSymbols())
+-        case .netplay, .azaharRoom:
++        case .netplay, .azaharRoom, .experimentalUpdateCIA:
+                 .symbolImage(R.image.online_iconSymbols())
+         case .symbianDevice:
+                 .symbol(.candybarphone)
+@@ -377,6 +378,8 @@
+             R.string.localizable.deadZoneSetting()
+         case .rewind:
+             R.string.localizable.rewind()
++        case .experimentalUpdateCIA:
++            "更新CIAを導入（C専用）"
+         case .azaharRoom:
+             "Azahar Room (3DS LAN)"
+         case .netplay:
+@@ -446,6 +449,7 @@
+     }
+     
+     private static let disableOptionsForMultiGames: [Self] = [
++        .experimentalUpdateCIA,
+         .azaharRoom,
+         .rename,
+         .cover,
+@@ -489,7 +493,8 @@
+             .platformChange,
+             .switchCore,
+             .changeCategory,
+-            .genHomeMenu
++            .genHomeMenu,
++            .experimentalUpdateCIA
+         ],
+         [
+             .retroAchievements
+@@ -1298,6 +1303,10 @@
+             allOptions.remove(.rewind)
+         }
+         
++        if !game.isAzahar3DS || PlayViewController.isGaming || scene == .gaming ||
++            (Bundle.main.object(forInfoDictionaryKey: "ManicRoomBuildMode") as? String) != "experimental" {
++            allOptions.remove(.experimentalUpdateCIA)
++        }
+         if !game.isAzahar3DS || !PlayViewController.isGaming {
+             allOptions.remove(.azaharRoom)
+         }
+--- a/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift
++++ b/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift
+@@ -1068,6 +1068,10 @@
+         case .rewind:
+             performSwitchAction(with: games)
+             
++        case .experimentalUpdateCIA:
++            guard firstGame.isAzahar3DS, !PlayViewController.isGaming else { return }
++            LibretroCore.sharedInstance().presentExperimentalCIAImporter()
++
+         case .azaharRoom:
+             guard firstGame.isAzahar3DS, PlayViewController.isGaming else { return }
+             pauseEmulationIfNeed()

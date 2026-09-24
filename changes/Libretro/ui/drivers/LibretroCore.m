@@ -9,6 +9,8 @@
 #import "LibretroCore.h"
 #include "../../pkg/apple/ManicEMU/AzaharRoomABI.h"
 #include "../../pkg/apple/ManicEMU/AzaharCompatABI.h"
+#include "../../pkg/apple/ManicEMU/ManicCIAABI.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import "LibretroShaderPreview.h"
 #include <stdint.h>
 #include <stddef.h>
@@ -82,13 +84,38 @@ static void LibretroEKA2L1ShutdownManagement(void);
 + (instancetype)hostWithLANHost:(const struct netplay_host *)lanHost;
 @end
 
-@interface LibretroCore()
+@interface LibretroCore() <UIDocumentPickerDelegate>
 
 @property (assign) BOOL isRunning;
+@property (atomic, assign) BOOL ciaImportBusy;
+@property (atomic, assign) BOOL ciaImportCancelled;
 @property (assign) unsigned keyboardMods;
 
 @end
 
+static int32_t ManicCIACancel(void *context) {
+    return ((__bridge LibretroCore *)context).ciaImportCancelled ? 1 : 0;
+}
+static BOOL ManicCIAHasLoadedCore(void) {
+#if !TARGET_IPHONE_SIMULATOR
+    runloop_state_t *runloop = runloop_state_get_ptr();
+    return runloop && runloop->lib_handle;
+#else
+    return YES;
+#endif
+}
+static UIViewController *ManicCIAPresenter(void) {
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class]) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+            if (!window.isKeyWindow) continue;
+            UIViewController *vc = window.rootViewController;
+            while (vc.presentedViewController && !vc.presentedViewController.isBeingDismissed) vc = vc.presentedViewController;
+            return vc;
+        }
+    }
+    return nil;
+}
 static void netplayDidTrigger(int event, const char *info);
 static void (^_Nullable s_netplay_host_list_completion)(NSArray<LibretroHost *> * _Nullable hosts) = nil;
 static void (^_Nullable s_netplay_lan_host_list_completion)(NSArray<LibretroHost *> * _Nullable hosts) = nil;
@@ -162,6 +189,8 @@ static BOOL ManicRoomExperiment(void) {
     dispatch_once(&onceToken, ^{
         instance = [[self alloc] init];
         instance.retroArch_iOS = [RetroArch_iOS new];
+        [[NSNotificationCenter defaultCenter] addObserver:instance selector:@selector(manicCIADidEnterBackground:)
+            name:UIApplicationDidEnterBackgroundNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:instance
             selector:@selector(azaharRoomDidEnterBackground:) name:UIApplicationDidEnterBackgroundNotification object:nil];
     });
@@ -188,6 +217,7 @@ static BOOL ManicRoomExperiment(void) {
 
 - (UIViewController *)startWithCustomSaveDir:(NSString *_Nullable)customSaveDir {
     if (![NSThread isMainThread]) { NSLog(@"Libretro start requires main thread"); return nil; }
+    if (self.ciaImportBusy) return nil;
     if (ManicRoomExperiment()) {
         NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
         customSaveDir = [documents stringByAppendingPathComponent:@"RoomExperiment-v1"];
@@ -226,6 +256,7 @@ static BOOL ManicRoomExperiment(void) {
 
 - (void)stop {
     if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self stop]; }); return; }
+    if (self.ciaImportBusy) { self.ciaImportCancelled = YES; return; }
     [self leaveAzaharRoom];
     self.isRunning = NO;
     cheevos_event_register_callback(NULL);
@@ -306,18 +337,21 @@ static BOOL ManicRoomExperiment(void) {
 }
 
 - (void)reload {
+    if (self.ciaImportBusy) return;
     if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self reload]; }); return; }
     if (YES && [self azaharRoomActive]) return;
     [[self getRetroArch] reload];
 }
 
 - (void)reloadByKeepState:(BOOL)keepState {
+    if (self.ciaImportBusy) return;
     if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self reloadByKeepState:keepState]; }); return; }
     if (YES && [self azaharRoomActive]) return;
     [[self getRetroArch] reloadByKeepState:keepState];
 }
 
 - (BOOL)loadGame:(NSString *_Nonnull)gamePath corePath:(NSString *_Nonnull)corePath completion:(void(^ _Nullable)(NSDictionary *_Nullable))completion {
+    if (self.ciaImportBusy) return NO;
     if (![NSThread isMainThread]) { NSLog(@"Libretro synchronous operation requires main thread"); return NO; }
     if (!LibretroPathLooksLikeEKA2L1(corePath)) {
         LibretroEKA2L1ShutdownManagement();
@@ -326,6 +360,7 @@ static BOOL ManicRoomExperiment(void) {
 }
 
 - (void)loadCoreWithoutContent:(NSString *_Nonnull)corePath {
+    if (self.ciaImportBusy) return;
     if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self loadCoreWithoutContent:corePath]; }); return; }
     if (!LibretroPathLooksLikeEKA2L1(corePath)) {
         LibretroEKA2L1ShutdownManagement();
@@ -1391,11 +1426,13 @@ static dylib_t active_room_core(void) {
     [self leaveAzaharRoom];
 }
 
+#include "../../pkg/apple/ManicEMU/ManicCIAUI.inc"
+
 - (void)installAzaharCIA:(NSString *_Nonnull)path {
     if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self installAzaharCIA:path]; }); return; }
     if (ManicRoomExperiment()) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"実験用Azahar: CIA導入は未対応"
-            message:@"起動前の保存先設定を検証できていないため中止しました。更新データは実験用3DS領域へバックアップのコピーを配置してください。" preferredStyle:UIAlertControllerStyleAlert];
+            message:@"この旧APIは使用できません。更新データはライブラリの3DSゲームメニュー「更新CIAを導入（C専用）」で選択してください。" preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
         UIViewController *presenter = [CocoaView get];
         while (presenter.presentedViewController) presenter = presenter.presentedViewController;

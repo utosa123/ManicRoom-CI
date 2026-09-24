@@ -53,6 +53,8 @@ jobs:
         with: {persist-credentials: false}
       - name: Xcode SDK tools and disk inventory
         run: bash ci/macos-preflight.sh
+      - name: Shared CIA negative tests and iOS C ABI (no game data)
+        run: bash ci/test-cia-policy.sh
       - name: Prepare pinned public candidate and A2 Room patches
         run: python3 ci/prepare.py core
       - name: Prepare changed Manic and protected original core
@@ -92,7 +94,10 @@ jobs:
           bash changes/ManicEMU/Scripts/Room/build-app.sh experimental stage-C/ManicEMU app-out local.manicroom.experimental
       - name: 7 Generate unsigned C IPA
         id: ipa
-        run: bash changes/ManicEMU/Scripts/Room/package-unsigned.sh app-out
+        run: |
+          bash changes/ManicEMU/Scripts/Room/package-unsigned.sh app-out
+          mv app-out/ManicRoom-experimental-UNSIGNED.ipa app-out/ManicRoom-experimental-cia-UNSIGNED.ipa
+          shasum -a 256 app-out/ManicRoom-experimental-cia-UNSIGNED.ipa > app-out/IPA-SHA256SUMS
       - name: Record separate outcomes even after a failure
         if: always()
         env:

@@ -21,7 +21,7 @@ class MachOTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.old=parse(BINARY)
     def candidate_fixture(self):
-        names=({e['name'] for e in self.old['exports']}-UNSUPPORTED)|ROOM|{'_retro_manic_experiment_api_version'}
+        names=({e['name'] for e in self.old['exports']}-UNSUPPORTED)|ROOM|{'_retro_manic_experiment_api_version','_retro_manic_install_update_cia_v1'}
         return {'sha256':'synthetic-fixture-not-a-core','exports':[{'name':n,'flags':0,'address':1} for n in names],
                 'dependencies':[{'name':'/usr/lib/libc++.1.dylib','command':'0xc'}],
                 'platform':2,'id':'@rpath/azahar.libretro.framework/azahar.libretro'}

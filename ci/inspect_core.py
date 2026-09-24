@@ -40,6 +40,7 @@ def validate(original,candidate,phase):
         expected={e['name'] for e in original['exports'] if e['name'].startswith('_retro_')}
         assert expected-names==UNSUPPORTED, 'unexpected missing legacy APIs or unsupported API was added'
         assert ADAPTERS<=names and '_retro_manic_experiment_api_version' in names
+        assert '_retro_manic_install_update_cia_v1' in names, 'missing explicit CIA result API'
     elif phase=='room':assert ROOM<=names,'missing Room exports'
     else:raise ValueError(phase)
 def main():

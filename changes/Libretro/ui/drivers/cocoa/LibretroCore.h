@@ -202,6 +202,7 @@ typedef NS_ENUM(NSInteger, LibretroNetplayEvent) {
 - (void)registerAzaharKeyboard:(void(^ _Nullable)(AzaharKeyboardConfig *_Nonnull config))callback;
 - (void)inputAzaharKeyboard:(NSString *_Nullable)text buttonType:(AzaharButtonType)buttonType;
 - (void)installAzaharCIA:(NSString *_Nonnull)path;
+- (void)presentExperimentalCIAImporter;
 + (NSString *_Nullable)getPSPGameIDWithRomPath:(NSString *_Nonnull)romPath;
 + (LibretroPSPGame *_Nullable)installPSPGameWithZipPath:(NSString *_Nonnull)zipPath destDir:(NSString *_Nonnull)destDir;
 - (void)setFullScreen:(BOOL)isFullScreen;

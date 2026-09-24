@@ -35,6 +35,7 @@ _retro_remove_amiibo
 _retro_set_keyboard_callback
 _retro_keyboard_input
 _retro_install_cia
+_retro_manic_install_update_cia_v1
 _retro_manic_experiment_api_version
 _retro_azahar_set_keyboard_callback
 _retro_azahar_keyboard_input

@@ -86,7 +86,8 @@ enum GameOption: Int, CaseIterable {
          ndsLidToggle,
          editLink,
          skinButtonBinding,
-         azaharRoom
+         azaharRoom,
+         experimentalUpdateCIA
         
     //When adding a new option, make sure to add it at the end; otherwise, it might affect the existing Prefference configurations
     
@@ -226,7 +227,7 @@ enum GameOption: Int, CaseIterable {
                 .symbolImage(R.image.joycon_iconSymbols())
         case .rewind:
                 .symbolImage(R.image.rewind_iconSymbols())
-        case .netplay, .azaharRoom:
+        case .netplay, .azaharRoom, .experimentalUpdateCIA:
                 .symbolImage(R.image.online_iconSymbols())
         case .symbianDevice:
                 .symbol(.candybarphone)
@@ -377,6 +378,8 @@ enum GameOption: Int, CaseIterable {
             R.string.localizable.deadZoneSetting()
         case .rewind:
             R.string.localizable.rewind()
+        case .experimentalUpdateCIA:
+            "更新CIAを導入（C専用）"
         case .azaharRoom:
             "Azahar Room (3DS LAN)"
         case .netplay:
@@ -446,6 +449,7 @@ enum GameOption: Int, CaseIterable {
     }
     
     private static let disableOptionsForMultiGames: [Self] = [
+        .experimentalUpdateCIA,
         .azaharRoom,
         .rename,
         .cover,
@@ -489,7 +493,8 @@ enum GameOption: Int, CaseIterable {
             .platformChange,
             .switchCore,
             .changeCategory,
-            .genHomeMenu
+            .genHomeMenu,
+            .experimentalUpdateCIA
         ],
         [
             .retroAchievements
@@ -1298,6 +1303,10 @@ enum GameOption: Int, CaseIterable {
             allOptions.remove(.rewind)
         }
         
+        if !game.isAzahar3DS || PlayViewController.isGaming || scene == .gaming ||
+            (Bundle.main.object(forInfoDictionaryKey: "ManicRoomBuildMode") as? String) != "experimental" {
+            allOptions.remove(.experimentalUpdateCIA)
+        }
         if !game.isAzahar3DS || !PlayViewController.isGaming {
             allOptions.remove(.azaharRoom)
         }

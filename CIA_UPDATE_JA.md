@@ -1,0 +1,23 @@
+# C更新CIA導入：契約と検証範囲
+
+既存C成功 run 35899958297 / commit 0801dc82feab0b712e3e1b257be4aecfceab94b6 は別成果物として保持する。Room実装は変更しない。署名・実機・Room通信はこの変更のCIでは実施しない。
+
+元 `retro_azahar_install_cia` はManicから `void(const char *)` としてdlopen/dlsym経由で同期呼出しされる。確認できたSwift呼出元はPretendoNetworkingViewのNimbus導入で、完了後に無条件で成功toastを出す。戻り値・保存先引数・失敗通知がなく、対応元coreの実装ソースも不明なため、その契約を候補coreへ保証しない。Nimbus入口はCで引き続き停止する。
+
+候補の `retro_install_cia` もvoidでAM::InstallCIAの結果を捨てる。AM helperは同期処理で、ファイル未発見・暗号化・不正CIA・中断等を返すが、短いreadの反復やClose/write結果の扱いに不足がある。CIAFile::Closeは失敗時contentディレクトリを削除し得る。ゲーム中の安全性は確認できないため、これを直接ライブSDMCに対して呼ばない。
+
+新しいC専用ABI `retro_manic_install_update_cia_v1` を個別symbolで検出する。既存void APIやextension_versionを偽装しない。共有CヘッダーはcoreとObjCで同一、戻り値int32、結果構造体32 bytes（title_id offset 8、content_bytes offset 24）。path/root・cancel/contextは同期呼出しの間のみ借用し保持しない。C++例外は境界内で捕捉する。Swiftはライブラリの既存ゲームメニューに1項目追加するだけで、file pickerと結果表示はbridgeに置く。
+
+ライブラリでAzaharを使用する3DSゲームを選び「更新CIAを導入（C専用）」を実行する。ゲーム／コア未ロード時のみ開始し、開始から終了まではstart/load/reloadを拒否。停止・background・キャンセルはatomicフラグを立てる。workerが同期APIから戻ってからdylibをcloseする。ファイルピッカーは.ciaのみ・単一選択で、指定ファイル以外は探索しない。選んだゲームとCIAのTitle IDの自動一致判定はなく、別タイトルの更新はそのタイトル用に導入される旨を表示する。
+
+coreでもfrontend初期化中・powered-on・同時導入をBusyにする。HOME/Documents/RoomExperiment-v1/3DSだけを受け付け、root以下のsymlinkを拒否、インストール前・公開直前にuser directoryを確認する。元Manicを探索・コピーしない。C内部のmkdtemp領域に入力コピーと仮のNAND/SDMCを作り、実際のAM::CIAFileへ書き込む。最終的な公開は新規SDMC titleディレクトリだけで、元環境にもC既存NAND/save/extdataにも上書きしない。
+
+復号済み・全contentを含むCTR更新（Title ID上位0004000e）のみ対応する。8 GiB以下・256 contents以下の制限を設ける。header/section境界・TMD/ticket Title ID一致・content index/サイズ・TMD記載SHA256・NCCH非暗号化を検査する。暗号解除・鍵取得・タイトル専用処理は追加しない。各NCCHの導入後SHA256/サイズ、TMDのID/version/countを読み戻して検査する。署名の暗号学的真正性を認証したとは主張しない。
+
+AMが仮NANDへ書くticketは外へ公開せず破棄する。公開候補のAppLoader_NCCHはSDMCのupdate Title IDからTMD/NCCHを読み込むため、復号済み更新の読み込み経路はticketに依存しない。これは全AM/ticket管理機能との互換性を意味しない。実ゲームでの更新認識は未検証。
+
+既存title領域は同一CIA・別versionを問わずAlreadyInstalledで拒否する。更新の置換・ダウングレード・アンインストールは今回実装しない。初回のVer.1.0→所有更新の導入が対象。同一volumeのRENAME_EXCLで、新規titleを検査完了後にのみ公開する。キャンセルは公開直前まで受け付け、公開後の遅いキャンセルでは成功を返す。通常失敗時は一時領域を破棄する。OSによる強制終了ではC配下に非公開の一時領域が残る可能性があり、ゲームからは参照されない。無断で既存更新やsaveを削除して復旧しない。電源断時の永続性を保証するものではない。
+
+UIの成功にはTitle ID・raw TMD versionを表示し、再起動を指示する。raw versionをゲーム表示のVer.1.2と同じ数値だと扱わない。file path・save内容・鍵をログへ追加しない。CIでは著作物CIAやゲームを取得・生成・アップロードしない。
+
+ローカルWindowsの共有policy/ABI負例13件は成功。macOSでは同じ負例にsymlink拒否を加え、iOS arm64 C ABIのcompile、header一致、core export、strict preflight、Swift/ObjC compile/link/archive/packageを検査する。負例テストはエミュレータ全体や実CIA導入を実行するものではない。実行runと結果は別の最終報告で記録する。

@@ -75,6 +75,7 @@ public:
 };
 
 CitraLibRetro* emu_instance;
+bool ManicCIAHasFrontend() { return emu_instance != nullptr; }
 // Apple keyboard callback storage
 static retro_keyboard_callback_t s_retro_keyboard_callback = nullptr;
 static std::shared_ptr<SoftwareKeyboard::AppleKeyboard> s_apple_keyboard;
@@ -124,6 +125,7 @@ void retro_deinit() {
     LibRetro::Input::Shutdown();
 
     delete emu_instance;
+    emu_instance = nullptr;
 
     Common::Log::Stop();
 }

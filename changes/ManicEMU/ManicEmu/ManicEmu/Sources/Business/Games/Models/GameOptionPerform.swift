@@ -1068,6 +1068,10 @@ extension GameOption {
         case .rewind:
             performSwitchAction(with: games)
             
+        case .experimentalUpdateCIA:
+            guard firstGame.isAzahar3DS, !PlayViewController.isGaming else { return }
+            LibretroCore.sharedInstance().presentExperimentalCIAImporter()
+
         case .azaharRoom:
             guard firstGame.isAzahar3DS, PlayViewController.isGaming else { return }
             pauseEmulationIfNeed()

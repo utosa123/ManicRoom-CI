@@ -7,8 +7,8 @@ trap 'rm -f "$tmp/original" "$tmp/candidate" "$tmp/missing" "$tmp/expected"; rmd
 xcrun nm -gU "$1" | awk '{print $NF}' | grep '^_retro_' | sort -u > "$tmp/original"
 xcrun nm -gU "$2" | awk '{print $NF}' | sort -u > "$tmp/candidate"
 comm -23 "$tmp/original" "$tmp/candidate" > "$tmp/missing"
-# Deliberately unsupported: legacy version contract unknown, pre-init CIA
-# storage setup unverified, remove_amiibo has no frontend declaration/caller.
+# Deliberately unsupported: legacy version and void CIA contract, remove_amiibo.
+# Updates use the separately versioned status-returning CIA API, never the void API.
 # All other legacy exports remain mandatory.
 printf '%s\n' _retro_azahar_extension_version _retro_azahar_install_cia _retro_azahar_remove_amiibo | sort > "$tmp/expected"
 diff -u "$tmp/expected" "$tmp/missing"
@@ -19,6 +19,7 @@ for symbol in set_keyboard_callback keyboard_input load_amiibo is_searching_amii
   grep -qx "_retro_azahar_$symbol" "$tmp/candidate"
 done
 grep -qx _retro_manic_experiment_api_version "$tmp/candidate"
+grep -qx _retro_manic_install_update_cia_v1 "$tmp/candidate"
 [[ "$(xcrun lipo -archs "$2")" == arm64 ]]
 xcrun vtool -show-build "$2" | grep -q 'platform IOS'
 echo 'PASS experimental export/platform contract; NOT a drop-in replacement or device verification.'

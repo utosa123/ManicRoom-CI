@@ -34,6 +34,7 @@ endif()
 
 add_library(azahar_libretro SHARED
         citra_libretro.cpp
+        cia_update.cpp
         manic_compat.cpp
         manic_compat.h
         room_session.cpp

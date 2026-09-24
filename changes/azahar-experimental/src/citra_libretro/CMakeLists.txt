@@ -61,7 +61,7 @@ target_compile_definitions(video_core PRIVATE HAVE_LIBRETRO)
 target_compile_definitions(audio_core PRIVATE HAVE_LIBRETRO)
 target_compile_definitions(input_common PRIVATE HAVE_LIBRETRO)
 
-target_link_libraries(azahar_libretro PRIVATE citra_common citra_core)
+target_link_libraries(azahar_libretro PRIVATE citra_common citra_core cryptopp)
 target_link_libraries(azahar_libretro PRIVATE Boost::boost dds-ktx libretro tsl::robin_map)
 if(ENABLE_VULKAN)
   target_link_libraries(azahar_libretro PRIVATE sirit vulkan-headers vma)

@@ -1,12 +1,42 @@
 --- a/ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift
 +++ b/ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift
-@@ -1748,6 +1748,13 @@
+@@ -752,6 +752,9 @@
+     
+     override func viewDidLoad() {
+         super.viewDidLoad()
++        if manicGame.gameType == ._3ds {
++            NSLog("[ROOM-C-DIAG] 3DS game launch requested selectedCore=%@ ROM=%@ safeMode=%d gameJit=%d", manicGame.isAzahar3DS ? "Azahar/libretro" : "Citra/ThreeDS", manicGame.romUrl.lastPathComponent, manicGame.safeMode ? 1 : 0, manicGame.jit ? 1 : 0)
++        }
+         
+         PlayViewController.currentPlayViewController = self
+         ExternalInputDispatch.sink = .gameplay
+@@ -808,14 +811,18 @@
+         // Load default core config after JIT is ready (sideload waits for CS_DEBUGGED first).
+         LibretroCore.sharedInstance().forbitJIT = manicGame.safeMode
+ #if SIDE_LOAD
++        if manicGame.gameType == ._3ds { NSLog("[ROOM-C-DIAG] JIT acquireIfNeeded ENTER (asynchronous)") }
+         StikJITHostCoordinator.shared.acquireIfNeeded(game: manicGame) { [weak self] in
+             guard let self else { return }
++            if self.manicGame.gameType == ._3ds { NSLog("[ROOM-C-DIAG] JIT acquireIfNeeded completion ENTER jitAvailable=%d", LibretroCore.jitAvailable() ? 1 : 0) }
+             self.loadConfig()
+             self.updateSkin()
+             if !self.manicGame.safeMode {
+                 self.updateTriggerPro()
+             }
+-        }
++            if self.manicGame.gameType == ._3ds { NSLog("[ROOM-C-DIAG] JIT acquireIfNeeded completion RETURN") }
++        }
++        if manicGame.gameType == ._3ds { NSLog("[ROOM-C-DIAG] JIT acquireIfNeeded RETURN (completion may be pending)") }
+ #else
+         loadConfig()
+         updateSkin()
+@@ -1748,6 +1755,13 @@
      
      //加载默认配置
      private func loadConfig() {
 +        LibretroCore.sharedInstance().setRoomCDiagnostics(manicGame.isAzahar3DS)
 +        if manicGame.gameType == ._3ds {
-+            NSLog("[ROOM-C-DIAG] 3DS game launch requested safeMode=%d jitAvailable=%d gameJit=%d selectedCore=%@ ROM=%@", manicGame.safeMode ? 1 : 0, LibretroCore.jitAvailable() ? 1 : 0, manicGame.jit ? 1 : 0, manicGame.isAzahar3DS ? "Azahar/libretro" : "Citra/ThreeDS", manicGame.romUrl.lastPathComponent)
++            NSLog("[ROOM-C-DIAG] 3DS launch configuration safeMode=%d jitAvailable=%d gameJit=%d selectedCore=%@ ROM=%@", manicGame.safeMode ? 1 : 0, LibretroCore.jitAvailable() ? 1 : 0, manicGame.jit ? 1 : 0, manicGame.isAzahar3DS ? "Azahar/libretro" : "Citra/ThreeDS", manicGame.romUrl.lastPathComponent)
 +            LibretroCore.sharedInstance().setLibretroLogMonitor(true)
 +            NSLog("[ROOM-C-DIAG] loadConfig ENTER")
 +        }
@@ -14,7 +44,7 @@
          let enableAchievements = manicGame.safeMode ? false : manicGame.enableAchievements
          isHardcoreMode = enableAchievements ? manicGame.enableHarcore : false
          
-@@ -1933,6 +1940,7 @@
+@@ -1933,6 +1947,7 @@
              } else if manicGame.gameType == ._3ds {
                  ThreeDS.isAzaharCore = manicGame.isAzahar3DS
                  if manicGame.isAzahar3DS {
@@ -22,7 +52,7 @@
                      updateLibretroCoreConfigs(core: .Azahar, configs: [
                          .citra_use_cpu_jit: "disabled",
                          .citra_use_default_aes_key: manicGame.isAzaharArticBase || manicGame.isArticBaseHomeMenu || manicGame.is3DSHomeMenuGame ? "enabled" : "disabled",
-@@ -2236,6 +2244,7 @@
+@@ -2236,6 +2251,7 @@
                      if enableJIT {
                          setupUniversalScript(gameType: ._3ds)
                      }
@@ -30,7 +60,7 @@
                      let enableLLE = (manicGame.isArticBaseHomeMenu || (manicGame.getExtraInt(key: ExtraKey.emulationAccuracy.rawValue) ?? 0 == 1)) ? true : false
                      updateLibretroCoreConfigs(core: .Azahar, configs: [
                          .citra_use_cpu_jit: enableJIT ? "enabled" : "disabled",
-@@ -2335,6 +2344,11 @@
+@@ -2335,6 +2351,11 @@
              enableLibretroLog = "true"
              libretroLogLevel = "0"
  #endif
@@ -42,7 +72,7 @@
              let enableMircophone: Bool
              if manicGame.safeMode {
                  enableMircophone = false
-@@ -2873,8 +2887,12 @@
+@@ -2873,8 +2894,12 @@
              }
              updateDualScreenViews()
          } else {
@@ -55,7 +85,7 @@
              guard let gameMetalView else { return }
              self.view.insertSubview(gameMetalView, belowSubview: controllerView)
              gameMetalView.snp.makeConstraints { make in
-@@ -2884,6 +2902,8 @@
+@@ -2884,6 +2909,8 @@
              if jitEnable {
                  setupUniversalScript(gameType: ._3ds)
              }
@@ -64,7 +94,7 @@
              citraCore?.start(withGameURL: manicGame.romUrl,
                               metalView: gameMetalView as! MTKView,
                               metalViewFrame: frames.skinFrame,
-@@ -2895,6 +2915,7 @@
+@@ -2895,6 +2922,7 @@
                               accurateShaders: manicGame.accurateShaders,
                               language: manicGame.region-1,
                               renderRightEye: manicGame.renderRightEye)
@@ -72,7 +102,7 @@
              DispatchQueue.main.asyncAfter(delay: 3.25) { [weak self] in
                  guard let self else { return }
                  self.updateFastforward(speed: self.manicGame.speed)
-@@ -4373,6 +4394,9 @@
+@@ -4373,6 +4401,9 @@
          if let coreConfigs = SpecialCoreOption.resolvedCoreConfigs(game: manicGame,
                                                                     optimizationCoreConfigs: configs,
                                                                     safeMode: safeMode) {

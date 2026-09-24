@@ -752,6 +752,9 @@ class PlayViewController: GameViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        if manicGame.gameType == ._3ds {
+            NSLog("[ROOM-C-DIAG] 3DS game launch requested selectedCore=%@ ROM=%@ safeMode=%d gameJit=%d", manicGame.isAzahar3DS ? "Azahar/libretro" : "Citra/ThreeDS", manicGame.romUrl.lastPathComponent, manicGame.safeMode ? 1 : 0, manicGame.jit ? 1 : 0)
+        }
         
         PlayViewController.currentPlayViewController = self
         ExternalInputDispatch.sink = .gameplay
@@ -808,14 +811,18 @@ class PlayViewController: GameViewController {
         // Load default core config after JIT is ready (sideload waits for CS_DEBUGGED first).
         LibretroCore.sharedInstance().forbitJIT = manicGame.safeMode
 #if SIDE_LOAD
+        if manicGame.gameType == ._3ds { NSLog("[ROOM-C-DIAG] JIT acquireIfNeeded ENTER (asynchronous)") }
         StikJITHostCoordinator.shared.acquireIfNeeded(game: manicGame) { [weak self] in
             guard let self else { return }
+            if self.manicGame.gameType == ._3ds { NSLog("[ROOM-C-DIAG] JIT acquireIfNeeded completion ENTER jitAvailable=%d", LibretroCore.jitAvailable() ? 1 : 0) }
             self.loadConfig()
             self.updateSkin()
             if !self.manicGame.safeMode {
                 self.updateTriggerPro()
             }
+            if self.manicGame.gameType == ._3ds { NSLog("[ROOM-C-DIAG] JIT acquireIfNeeded completion RETURN") }
         }
+        if manicGame.gameType == ._3ds { NSLog("[ROOM-C-DIAG] JIT acquireIfNeeded RETURN (completion may be pending)") }
 #else
         loadConfig()
         updateSkin()
@@ -1750,7 +1757,7 @@ extension PlayViewController {
     private func loadConfig() {
         LibretroCore.sharedInstance().setRoomCDiagnostics(manicGame.isAzahar3DS)
         if manicGame.gameType == ._3ds {
-            NSLog("[ROOM-C-DIAG] 3DS game launch requested safeMode=%d jitAvailable=%d gameJit=%d selectedCore=%@ ROM=%@", manicGame.safeMode ? 1 : 0, LibretroCore.jitAvailable() ? 1 : 0, manicGame.jit ? 1 : 0, manicGame.isAzahar3DS ? "Azahar/libretro" : "Citra/ThreeDS", manicGame.romUrl.lastPathComponent)
+            NSLog("[ROOM-C-DIAG] 3DS launch configuration safeMode=%d jitAvailable=%d gameJit=%d selectedCore=%@ ROM=%@", manicGame.safeMode ? 1 : 0, LibretroCore.jitAvailable() ? 1 : 0, manicGame.jit ? 1 : 0, manicGame.isAzahar3DS ? "Azahar/libretro" : "Citra/ThreeDS", manicGame.romUrl.lastPathComponent)
             LibretroCore.sharedInstance().setLibretroLogMonitor(true)
             NSLog("[ROOM-C-DIAG] loadConfig ENTER")
         }

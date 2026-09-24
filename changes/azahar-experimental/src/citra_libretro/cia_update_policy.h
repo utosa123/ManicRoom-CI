@@ -20,6 +20,13 @@ inline uint64_t Integer(const uint8_t* p, size_t n, bool big = false) {
 }
 inline uint64_t Align(uint64_t n) { return (n + 63) & ~uint64_t(63); }
 constexpr uint64_t MaxInput = uint64_t(8) << 30;
+// AM directory APIs return trailing '/'. Strip it before taking parent_path;
+// otherwise create_directories(parent_path) would create the commit destination.
+inline fs::path Directory(const fs::path& path) {
+    auto p=path.lexically_normal();
+    while(p.has_relative_path() && p.filename().empty()) p=p.parent_path();
+    return p;
+}
 inline void NoLinks(const fs::path& base, const fs::path& relative) {
     fs::path p = base;
     for (const auto& part : relative) {

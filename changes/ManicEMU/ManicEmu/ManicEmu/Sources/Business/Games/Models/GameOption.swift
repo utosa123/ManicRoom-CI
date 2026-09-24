@@ -929,7 +929,7 @@ enum GameOption: Int, CaseIterable {
                 return .chevron(rewind ? R.string.localizable.on() : R.string.localizable.off())
             }
             
-        case .azaharRoom:
+        case .azaharRoom, .experimentalUpdateCIA:
             return .chevron(nil)
         case .netplay:
             if LibretroNetplaySession.shared.isHosting,

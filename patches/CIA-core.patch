@@ -38,7 +38,7 @@
  _retro_azahar_keyboard_input
 --- /dev/null
 +++ b/src/citra_libretro/cia_update.cpp
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,193 @@
 +// Experimental offline update import. No Room or legacy extension-version contract.
 +#include "cia_update_policy.h"
 +#include <algorithm>
@@ -166,7 +166,7 @@
 +    Require(FileUtil::GetUserPath(FileUtil::UserPath::UserDir)==root.generic_string()+"/",MCIA_WRONG_ENVIRONMENT);
 +    auto media=Service::AM::GetTitleMediaType(tid);
 +    Require(media==Service::FS::MediaType::SDMC,MCIA_UNSUPPORTED);
-+    fs::path destination=Service::AM::GetTitlePath(media,tid);
++    fs::path destination=Directory(Service::AM::GetTitlePath(media,tid));
 +    auto relative=destination.lexically_relative(root);
 +    NoLinks(root,relative);
 +    Require(!fs::exists(destination),MCIA_ALREADY_INSTALLED); // Never replace a prior install/save.
@@ -203,7 +203,7 @@
 +    Require(installed_tmd.Load(Service::AM::GetTitleMetadataPath(media,tid))==Loader::ResultStatus::Success &&
 +        installed_tmd.GetTitleID()==tid && installed_tmd.GetTitleVersion()==tmd.GetTitleVersion() &&
 +        installed_tmd.GetContentCount()==count,MCIA_INSTALL_FAILED);
-+    fs::path staged_title=Service::AM::GetTitlePath(media,tid);
++    fs::path staged_title=Directory(Service::AM::GetTitlePath(media,tid));
 +    // Decrypted update loading uses TMD + NCCH, not the ticket. Keep the upstream
 +    // ticket confined to staging and discard it; no NAND/ticket database mutation.
 +    cancel.Check();
@@ -228,6 +228,9 @@
 +}
 +static_assert(sizeof(manic_cia_result_v1)==32);
 +static_assert(offsetof(manic_cia_result_v1,title_id)==8);
++static_assert(offsetof(FileSys::TitleMetadata::Body,title_id)==0x4c);
++static_assert(offsetof(FileSys::TitleMetadata::Body,content_count)==0x9e);
++static_assert(offsetof(FileSys::Ticket::Body,title_id)==0x9c);
 +static_assert(std::is_same_v<decltype(&retro_manic_install_update_cia_v1),manic_install_update_cia_v1>);
 --- /dev/null
 +++ b/src/citra_libretro/cia_update_api.h
@@ -264,7 +267,7 @@
 +#endif
 --- /dev/null
 +++ b/src/citra_libretro/cia_update_policy.h
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,77 @@
 +// Pure validation shared by the importer and host-side negative tests.
 +#pragma once
 +#include <array>
@@ -287,6 +290,13 @@
 +}
 +inline uint64_t Align(uint64_t n) { return (n + 63) & ~uint64_t(63); }
 +constexpr uint64_t MaxInput = uint64_t(8) << 30;
++// AM directory APIs return trailing '/'. Strip it before taking parent_path;
++// otherwise create_directories(parent_path) would create the commit destination.
++inline fs::path Directory(const fs::path& path) {
++    auto p=path.lexically_normal();
++    while(p.has_relative_path() && p.filename().empty()) p=p.parent_path();
++    return p;
++}
 +inline void NoLinks(const fs::path& base, const fs::path& relative) {
 +    fs::path p = base;
 +    for (const auto& part : relative) {

@@ -46,6 +46,15 @@
          ],
          [
              .retroAchievements
+@@ -924,7 +929,7 @@
+                 return .chevron(rewind ? R.string.localizable.on() : R.string.localizable.off())
+             }
+             
+-        case .azaharRoom:
++        case .azaharRoom, .experimentalUpdateCIA:
+             return .chevron(nil)
+         case .netplay:
+             if LibretroNetplaySession.shared.isHosting,
 @@ -1298,6 +1303,10 @@
              allOptions.remove(.rewind)
          }

@@ -19,6 +19,9 @@ int main() {
     try {
         auto docs=sandbox/"Documents";
         auto expected=docs/"RoomExperiment-v1/3DS";
+        auto destination=Directory((expected/"title/0004000e/12345678").generic_string()+"/");
+        fs::create_directories(destination.parent_path());
+        if(fs::exists(destination) || destination.filename()!="12345678") throw std::runtime_error("destination created before commit"); ++checks;
         if(Root(expected,docs)!=expected) throw std::runtime_error("valid isolated root rejected"); ++checks;
         Reject([&]{Root(docs/"3DS",docs);},MCIA_WRONG_ENVIRONMENT);
         Reject([&]{Root(sandbox/"Other/RoomExperiment-v1/3DS",docs);},MCIA_WRONG_ENVIRONMENT);
@@ -38,6 +41,7 @@ int main() {
         Reject([&]{Header(h,0x10000000);},MCIA_INVALID_FILE); // bounded allocation
         Reject([]{SignedBody({0,0,0,0});},MCIA_INVALID_FILE);
 #ifndef _WIN32
+        fs::remove_all(docs/"RoomExperiment-v1");
         fs::create_directory_symlink(sandbox,docs/"RoomExperiment-v1");
         Reject([&]{Root(expected,docs);},MCIA_WRONG_ENVIRONMENT);
 #endif

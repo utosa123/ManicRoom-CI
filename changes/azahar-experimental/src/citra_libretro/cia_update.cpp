@@ -125,7 +125,7 @@ static int32_t Install(const char* root_arg, const char* path_arg, manic_cia_res
     Require(FileUtil::GetUserPath(FileUtil::UserPath::UserDir)==root.generic_string()+"/",MCIA_WRONG_ENVIRONMENT);
     auto media=Service::AM::GetTitleMediaType(tid);
     Require(media==Service::FS::MediaType::SDMC,MCIA_UNSUPPORTED);
-    fs::path destination=Service::AM::GetTitlePath(media,tid);
+    fs::path destination=Directory(Service::AM::GetTitlePath(media,tid));
     auto relative=destination.lexically_relative(root);
     NoLinks(root,relative);
     Require(!fs::exists(destination),MCIA_ALREADY_INSTALLED); // Never replace a prior install/save.
@@ -162,7 +162,7 @@ static int32_t Install(const char* root_arg, const char* path_arg, manic_cia_res
     Require(installed_tmd.Load(Service::AM::GetTitleMetadataPath(media,tid))==Loader::ResultStatus::Success &&
         installed_tmd.GetTitleID()==tid && installed_tmd.GetTitleVersion()==tmd.GetTitleVersion() &&
         installed_tmd.GetContentCount()==count,MCIA_INSTALL_FAILED);
-    fs::path staged_title=Service::AM::GetTitlePath(media,tid);
+    fs::path staged_title=Directory(Service::AM::GetTitlePath(media,tid));
     // Decrypted update loading uses TMD + NCCH, not the ticket. Keep the upstream
     // ticket confined to staging and discard it; no NAND/ticket database mutation.
     cancel.Check();
@@ -187,4 +187,7 @@ extern "C" RETRO_API int32_t retro_manic_install_update_cia_v1(const char* root,
 }
 static_assert(sizeof(manic_cia_result_v1)==32);
 static_assert(offsetof(manic_cia_result_v1,title_id)==8);
+static_assert(offsetof(FileSys::TitleMetadata::Body,title_id)==0x4c);
+static_assert(offsetof(FileSys::TitleMetadata::Body,content_count)==0x9e);
+static_assert(offsetof(FileSys::Ticket::Body,title_id)==0x9c);
 static_assert(std::is_same_v<decltype(&retro_manic_install_update_cia_v1),manic_install_update_cia_v1>);

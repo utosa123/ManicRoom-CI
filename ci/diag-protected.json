@@ -1,0 +1,20 @@
+{
+  "baseline": "427101c237f9410ad83dba8a677e782304e49937",
+  "sha256_lf": {
+    "changes/Libretro/pkg/apple/ManicEMU/ManicCIAABI.h": "def50d58c81197d135c0b7c9028770e6e8277b147e7645668f9a7e2f7c55db5b",
+    "changes/Libretro/pkg/apple/ManicEMU/ManicCIAUI.inc": "95076f281fc6e753c8c0d52680a8ed2f40a52f038ad2f667aeba44cba27f2e90",
+    "changes/ManicEMU/ManicEmu/ManicEmu/Sources/Business/OnlinePlay/Views/AzaharRoomView.swift": "a19fae378c2bdc0aca8860ebcd5525d79d176a0eb4fdbb6e8005a84df43ea1b9",
+    "changes/azahar-experimental/src/citra_libretro/cia_update.cpp": "b741f5dfaca4cd254f8842a9ce45bfb32904bf84ec69ff06e1c38914c63e9663",
+    "changes/azahar-experimental/src/citra_libretro/cia_update_api.h": "def50d58c81197d135c0b7c9028770e6e8277b147e7645668f9a7e2f7c55db5b",
+    "changes/azahar-experimental/src/citra_libretro/cia_update_policy.h": "d9a87c71afc5cd1b0012bc0dc74c29df27c45b1a6799dbc4f979ed5c3670eafa",
+    "changes/azahar-experimental/src/citra_libretro/manic_compat.cpp": "24976a81c9cff9f78750da88971f84db90ab717fcce714d38f3745aeec9c04f8",
+    "changes/azahar-experimental/src/citra_libretro/manic_compat.h": "e1e17a194d339efc64439957975095242cfbde56c57f5406cebfcc21cdf9be77",
+    "changes/azahar-experimental/src/citra_libretro/room_api.h": "2ec7cdb1f112eb4118a1d9a62cf3647f70ccb049bda92b562ff7357c312546f6",
+    "changes/azahar-experimental/src/citra_libretro/room_session.cpp": "5cfa88c2b9a9714257d56b48ef8963a656853ac26b0a682aaf08134d9a1412f3",
+    "changes/azahar-experimental/src/citra_libretro/room_session.h": "f34993608bcbfb1016b86b6cdb5f65995f52bcba1b81ea671f015afa6605de44",
+    "changes/azahar-experimental/src/core/hle/service/nwm/nwm_uds.cpp": "fad8ef7741b90fe06be8ca1848ef95be0e5597a9e974d342b8b2a29a213b278d",
+    "changes/azahar-experimental/src/network/room_member.cpp": "e0b0eee5d6878a956220aef10f871224f4018c9f6bad9eddd3b35a799310e3f5",
+    "changes/azahar-experimental/src/network/room_member.h": "cd4b5c406e77a029580ea159861316c14a1c87a6c74dd47a7d225a2dde15d79c",
+    "ci/verify_b.py": "a68d741113f707d0092e1f3bb9851e5e0ca838a4261216134657335cf6745372"
+  }
+}

@@ -197,6 +197,8 @@ typedef NS_ENUM(NSInteger, LibretroNetplayEvent) {
 - (void)setFastforwardFrameSkip:(BOOL)frameSkip;
 - (void)set3DSCustomLayout:(NSString *_Nullable)layout;
 - (void)setLibretroLogMonitor:(BOOL)enable;
+/// Temporary C-only diagnostic routing; does not enable JIT or change core settings.
+- (void)setRoomCDiagnostics:(BOOL)enable;
 - (void)loadAmiibo:(NSString *_Nonnull)path;
 - (BOOL)isSearchingAmiibo;
 - (void)registerAzaharKeyboard:(void(^ _Nullable)(AzaharKeyboardConfig *_Nonnull config))callback;

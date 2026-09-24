@@ -1,3 +1,4 @@
+#include "citra_libretro/room_c_diag.h"
 // Copyright Citra Emulator Project / Azahar Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
@@ -831,10 +832,13 @@ static void ParseCpuOptions(void) {
     Settings::values.use_cpu_jit =
         LibRetro::FetchVariable(config::cpu::use_cpu_jit, config::enabled) == config::enabled;
 #if defined(IOS)
-    if (!LibRetro::CanUseJIT())
+    const bool diag_jit = LibRetro::CanUseJIT();
+    RoomCDiag::Log("core CPU JIT requested=%d CanUseJIT=%d", bool(Settings::values.use_cpu_jit.GetValue()), diag_jit);
+    if (!diag_jit)
         Settings::values.use_cpu_jit = false;
 #endif
 
+    RoomCDiag::Log("citra_use_cpu_jit final=%s", Settings::values.use_cpu_jit.GetValue() ? "enabled" : "disabled");
     auto cpu_clock = LibRetro::FetchVariable(config::cpu::cpu_clock_percentage, "100");
     Settings::values.cpu_clock_percentage = std::stoi(cpu_clock);
 }

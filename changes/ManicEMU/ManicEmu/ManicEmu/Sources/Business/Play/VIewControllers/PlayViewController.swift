@@ -1748,6 +1748,13 @@ extension PlayViewController {
     
     //加载默认配置
     private func loadConfig() {
+        LibretroCore.sharedInstance().setRoomCDiagnostics(manicGame.isAzahar3DS)
+        if manicGame.gameType == ._3ds {
+            NSLog("[ROOM-C-DIAG] 3DS game launch requested safeMode=%d jitAvailable=%d gameJit=%d selectedCore=%@ ROM=%@", manicGame.safeMode ? 1 : 0, LibretroCore.jitAvailable() ? 1 : 0, manicGame.jit ? 1 : 0, manicGame.isAzahar3DS ? "Azahar/libretro" : "Citra/ThreeDS", manicGame.romUrl.lastPathComponent)
+            LibretroCore.sharedInstance().setLibretroLogMonitor(true)
+            NSLog("[ROOM-C-DIAG] loadConfig ENTER")
+        }
+        defer { if manicGame.gameType == ._3ds { NSLog("[ROOM-C-DIAG] loadConfig RETURN") } }
         let enableAchievements = manicGame.safeMode ? false : manicGame.enableAchievements
         isHardcoreMode = enableAchievements ? manicGame.enableHarcore : false
         
@@ -1933,6 +1940,7 @@ extension PlayViewController {
             } else if manicGame.gameType == ._3ds {
                 ThreeDS.isAzaharCore = manicGame.isAzahar3DS
                 if manicGame.isAzahar3DS {
+                    NSLog("[ROOM-C-DIAG] calculated jitEnable=0 citra_use_cpu_jit=disabled (safeMode)")
                     updateLibretroCoreConfigs(core: .Azahar, configs: [
                         .citra_use_cpu_jit: "disabled",
                         .citra_use_default_aes_key: manicGame.isAzaharArticBase || manicGame.isArticBaseHomeMenu || manicGame.is3DSHomeMenuGame ? "enabled" : "disabled",
@@ -2236,6 +2244,7 @@ extension PlayViewController {
                     if enableJIT {
                         setupUniversalScript(gameType: ._3ds)
                     }
+                    NSLog("[ROOM-C-DIAG] calculated jitEnable=%d citra_use_cpu_jit=%@ (requested)", enableJIT ? 1 : 0, enableJIT ? "enabled" : "disabled")
                     let enableLLE = (manicGame.isArticBaseHomeMenu || (manicGame.getExtraInt(key: ExtraKey.emulationAccuracy.rawValue) ?? 0 == 1)) ? true : false
                     updateLibretroCoreConfigs(core: .Azahar, configs: [
                         .citra_use_cpu_jit: enableJIT ? "enabled" : "disabled",
@@ -2335,6 +2344,11 @@ extension PlayViewController {
             enableLibretroLog = "true"
             libretroLogLevel = "0"
 #endif
+            if manicGame.isAzahar3DS {
+                enableLibretroLog = "true"
+                libretroLogLevel = "0"
+                NSLog("[ROOM-C-DIAG] log_verbosity=true libretro_log_level=0; citraCore/ThreeDS/MTKView path=N/A for Azahar (libretro CocoaView)")
+            }
             let enableMircophone: Bool
             if manicGame.safeMode {
                 enableMircophone = false
@@ -2873,8 +2887,12 @@ extension PlayViewController {
             }
             updateDualScreenViews()
         } else {
+            NSLog("[ROOM-C-DIAG] Citra bridge acquisition ENTER")
             citraCore = self.emulatorCore?.deltaCore.emulatorBridge as? ThreeDSEmulatorBridge
+            NSLog("[ROOM-C-DIAG] Citra bridge acquisition RETURN success=%d", citraCore != nil ? 1 : 0)
+            NSLog("[ROOM-C-DIAG] MTKView creation ENTER")
             gameMetalView = MTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
+            NSLog("[ROOM-C-DIAG] MTKView creation RETURN success=%d metalDevice=%d", gameMetalView != nil ? 1 : 0, (gameMetalView as? MTKView)?.device != nil ? 1 : 0)
             guard let gameMetalView else { return }
             self.view.insertSubview(gameMetalView, belowSubview: controllerView)
             gameMetalView.snp.makeConstraints { make in
@@ -2884,6 +2902,8 @@ extension PlayViewController {
             if jitEnable {
                 setupUniversalScript(gameType: ._3ds)
             }
+            NSLog("[ROOM-C-DIAG] Citra calculated jitEnable=%d safeMode=%d; citra_use_cpu_jit=N/A (native Citra)", jitEnable ? 1 : 0, manicGame.safeMode ? 1 : 0)
+            NSLog("[ROOM-C-DIAG] citraCore.start ENTER bridgePresent=%d", citraCore != nil ? 1 : 0)
             citraCore?.start(withGameURL: manicGame.romUrl,
                              metalView: gameMetalView as! MTKView,
                              metalViewFrame: frames.skinFrame,
@@ -2895,6 +2915,7 @@ extension PlayViewController {
                              accurateShaders: manicGame.accurateShaders,
                              language: manicGame.region-1,
                              renderRightEye: manicGame.renderRightEye)
+            NSLog("[ROOM-C-DIAG] citraCore.start RETURN bridgePresent=%d (boot scheduled asynchronously)", citraCore != nil ? 1 : 0)
             DispatchQueue.main.asyncAfter(delay: 3.25) { [weak self] in
                 guard let self else { return }
                 self.updateFastforward(speed: self.manicGame.speed)
@@ -4373,6 +4394,9 @@ extension PlayViewController {
         if let coreConfigs = SpecialCoreOption.resolvedCoreConfigs(game: manicGame,
                                                                    optimizationCoreConfigs: configs,
                                                                    safeMode: safeMode) {
+            if manicGame.isAzahar3DS {
+                NSLog("[ROOM-C-DIAG] resolved config citra_use_cpu_jit=%@", coreConfigs["citra_use_cpu_jit"] ?? "not specified")
+            }
             LibretroCore.sharedInstance().updateConfig(core.name,
                                                        configs: coreConfigs,
                                                        reload: false)

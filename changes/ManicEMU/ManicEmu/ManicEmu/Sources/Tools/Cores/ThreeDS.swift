@@ -1,0 +1,831 @@
+//
+//  ThreeDS.swift
+//  ManicEmu
+//
+//  Created by Daiuno on 2025/4/8.
+//  Copyright © 2025 Manic EMU. All rights reserved.
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+
+import AVFoundation
+import Citra
+import MetalKit
+
+extension GameType
+{
+    static let _3ds = GameType("public.aoshuang.game.3ds")
+}
+
+@objc enum ThreeDSGameInput: Int, Input, CaseIterable {
+    case a = 700
+    case b = 701
+    case x = 702
+    case y = 703
+    case start = 704
+    case select = 705
+    case home = 706
+    case menu = 1
+    case l2 = 707
+    case r2 = 708
+    case up = 709
+    case down = 710
+    case left = 711
+    case right = 712
+    case l1 = 773
+    case r1 = 774
+    case CirclePad = 713
+    case leftThumbstickUp = 714
+    case leftThumbstickDown = 715
+    case leftThumbstickLeft = 716
+    case leftThumbstickRight = 717
+    case CStick = 718
+    case rightThumbstickUp = 719
+    case rightThumbstickDown = 720
+    case rightThumbstickLeft = 771
+    case rightThumbstickRight = 772
+    
+    case touchScreenX = 4096
+    case touchScreenY = 8192
+    
+    case flex = 0
+
+    var type: InputType {
+        return .game(._3ds)
+    }
+    
+    var isContinuous: Bool {
+        switch self
+        {
+        case .leftThumbstickUp, .leftThumbstickDown, .leftThumbstickLeft, .leftThumbstickRight: return true
+        case .rightThumbstickUp, .rightThumbstickDown, .rightThumbstickLeft, .rightThumbstickRight: return true
+        case .touchScreenX, .touchScreenY: return true
+        default: return false
+        }
+    }
+    
+    init?(stringValue: String) {
+        if stringValue == "a" { self = .a }
+        else if stringValue == "b" { self = .b }
+        else if stringValue == "x" { self = .x }
+        else if stringValue == "y" { self = .y }
+        else if stringValue == "start" { self = .start }
+        else if stringValue == "select" { self = .select }
+        else if stringValue == "home" { self = .home }
+        else if stringValue == "menu" { self = .menu }
+        else if stringValue == "l2" { self = .l2 }
+        else if stringValue == "r2" { self = .r2 }
+        else if stringValue == "up" { self = .up }
+        else if stringValue == "down" { self = .down }
+        else if stringValue == "left" { self = .left }
+        else if stringValue == "right" { self = .right }
+        else if stringValue == "l1" { self = .l1 }
+        else if stringValue == "r1" { self = .r1 }
+        else if stringValue == "CirclePad" { self = .CirclePad }
+        else if stringValue == "leftThumbstickUp" { self = .leftThumbstickUp }
+        else if stringValue == "leftThumbstickDown" { self = .leftThumbstickDown }
+        else if stringValue == "leftThumbstickLeft" { self = .leftThumbstickLeft }
+        else if stringValue == "leftThumbstickRight" { self = .leftThumbstickRight }
+        else if stringValue == "CStick" { self = .CStick }
+        else if stringValue == "rightThumbstickUp" { self = .rightThumbstickUp }
+        else if stringValue == "rightThumbstickDown" { self = .rightThumbstickDown }
+        else if stringValue == "rightThumbstickLeft" { self = .rightThumbstickLeft }
+        else if stringValue == "rightThumbstickRight" { self = .rightThumbstickRight }
+        else if stringValue == "touchScreenX" { self = .touchScreenX }
+        else if stringValue == "touchScreenY" { self = .touchScreenY }
+        else if stringValue == "flex" { self = .flex }
+        else { return nil }
+    }
+}
+
+struct ThreeDS: DeltaCoreProtocol {
+    static func generate3DSHomeMenu() {
+        let homeMenus = [
+            "JPN": "/00008202/",
+            "USA": "/00008f02/",
+            "EUR": "/00009802/",
+            "CHN": "/0000a102/",
+            "KOR": "/0000a902/",
+            "TWN": "/0000b102/"
+        ]
+        
+        if let enumerator = FileManager.default.enumerator(at: URL(fileURLWithPath: R.Path.Document.appendingPathComponent("3DS/nand/00000000000000000000000000000000/title/00040030")), includingPropertiesForKeys: [.isDirectoryKey]) {
+            for case let fileURL as URL in enumerator {
+                let isDirectory = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                guard !isDirectory else { continue }
+                guard fileURL.pathExtension.lowercased() == "app" else { continue }
+                for (region, path) in homeMenus {
+                    if fileURL.path.contains(path, caseSensitive: false) {
+                        print("发现home menu")
+                        let realm = Database.realm
+                        if let hash = FileHashUtil.truncatedHash(url: fileURL) {
+                            if let _ = realm.object(ofType: Game.self, forPrimaryKey: hash) {
+                                continue
+                            } else {
+                                let game = Game()
+                                game.id = hash
+                                game.name = fileURL.deletingPathExtension().lastPathComponent
+                                game.fileExtension = fileURL.pathExtension
+                                game.gameType = ._3ds
+                                game.extras = [
+                                    ExtraKey.identifier.rawValue: R.Numbers.ThreeDSHomeMenuIdentifiers[R.Strings.ThreeDSHomeMenuRegions.firstIndex(where: { $0 == region }) ?? 0],
+                                    ExtraKey.regions.rawValue: region
+                                ].jsonData()
+                                game.aliasName = "Home Menu (\(region))"
+                                game.importDate = Date()
+                                game.defaultCore = 1
+                                try? realm.write { realm.add(game) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    static let core = ThreeDS()
+    
+    var name: String { "3DS" }
+    var identifier: String { "com.aoshuang.3DSCore" }
+    var version: String? { "1.7.0" }
+    
+    var gameType: GameType { GameType._3ds }
+    var gameInputType: Input.Type { ThreeDSGameInput.self }
+    var allInputs: [Input] { ThreeDSGameInput.allCases }
+    var gameSaveFileExtension: String { "3ds.sav" }
+    
+    
+    let videoFormat = VideoFormat(format: .bitmap(.bgra8), dimensions: CGSize(width: 400, height: 480))
+    
+    var supportedCheatFormats: Set<CheatFormat> {
+        let actionReplayFormat = CheatFormat(name: NSLocalizedString("Gateshark", comment: ""), format: "XXXXXXXX YYYYYYYY", type: .gateshark)
+        return [actionReplayFormat]
+    }
+    
+    static var isAzaharCore: Bool = false
+    
+    var emulatorBridge: EmulatorBridging {
+        if Self.isAzaharCore {
+            return AzaharEmulatorBridge.shared
+        } else {
+            return ThreeDSEmulatorBridge.shared
+        }
+    }
+    
+    private init()
+    {
+    }
+    
+    //For Citra
+    static func setupCheats(identifier: UInt64, cheatsTxt: String, enableCheats: [String]) {
+        let manager = CitraCheatsManager(identifier: identifier)
+        let path = manager.cheatFilePath()
+        try? cheatsTxt.writeWithCompletePath(to: URL(fileURLWithPath: path))
+        manager.loadCheats()
+        let cheats = manager.getCheats()
+        for (index, cheat) in cheats.enumerated() {
+            if enableCheats.contains(where: { $0.contains(cheat.name) }) {
+                cheat.enabled = true
+            } else {
+                cheat.enabled = false
+            }
+            manager.update(cheat, at: index)
+        }
+        manager.saveCheats()
+    }
+    
+    struct Cheat {
+        let name: String
+        let code: String
+    }
+
+    static func parseCheatFile(_ text: String) -> [Cheat] {
+        let pattern = #"\[(.*?)\]\s*([\s\S]*?)(?=\n\s*\[|$)"#
+
+        let regex = try! NSRegularExpression(pattern: pattern, options: [])
+        let nsText = text as NSString
+        let matches = regex.matches(
+            in: text,
+            options: [],
+            range: NSRange(location: 0, length: nsText.length)
+        )
+
+        return matches.compactMap { match in
+            guard match.numberOfRanges == 3 else { return nil }
+
+            let title = nsText.substring(with: match.range(at: 1))
+
+            let rawCode = nsText.substring(with: match.range(at: 2))
+            let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            return Cheat(name: title, code: code)
+        }
+    }
+}
+
+class ThreeDSEmulatorBridge : EmulatorBridgeBase {
+    
+    static let shared = ThreeDSEmulatorBridge()
+    private let citraCore = CitraCore.shared()
+    
+    private var enableControl = false
+    
+    private var thumbstickPosition: CGPoint = .zero
+    private var cstickPosition: CGPoint = .zero
+    private var touchPosition: CGPoint = .zero
+    
+    private weak var metalView: MTKView? = nil
+    
+    private var topRect: CGRect = .zero
+    private var bottomRect: CGRect = .zero
+    
+    private var isAdvancedMode: Bool = false
+    
+    func setSimBlowing(start: Bool) {
+        citraCore.setSimBlowing(start: start)
+    }
+
+    /// 0=portrait, 1=landscapeLeft, 2=upside down, 3=landscapeRight.
+    func setMotionRotation(_ rotation: Int) {
+        citraCore.setMotionRotation(rotation)
+    }
+
+    func applyCurrentMotionRotation(
+        _ orientation: UIInterfaceOrientation = UIDevice.currentOrientation
+    ) {
+        switch orientation {
+        case .portrait:
+            citraCore.setMotionRotation(0)
+        case .landscapeLeft:
+            citraCore.setMotionRotation(1)
+        case .portraitUpsideDown:
+            citraCore.setMotionRotation(2)
+        case .landscapeRight:
+            citraCore.setMotionRotation(3)
+        default:
+            citraCore.setMotionRotation(3)
+        }
+    }
+
+    func setFrameLimit(_ limit: UInt16) {
+        citraCore.setFrameLimit(limit)
+    }
+    
+    func jumpToHome() {
+        citraCore.jumpToHome()
+    }
+    
+    func loadAmiibo(path: String) {
+        citraCore.loadAmiibo(path: path)
+    }
+    
+    func isAmiiboSearching() -> Bool {
+        return citraCore.isSearchingAmiibo()
+    }
+    
+    func setResolution(resolution: GameOption.Resolution) {
+        updateConfig(["ManicEMU.resolutionFactor": resolution.rawValue])
+    }
+    
+    func openKeyboardAction(_ action: ((CitraKeyboardConfig) -> Void)? = nil) {
+        CitraCore.openKeyboardAction = { config in
+            guard let action else { return }
+            if Thread.isMainThread {
+                action(config)
+            } else {
+                DispatchQueue.main.async {
+                    action(config)
+                }
+            }
+        }
+    }
+    
+    func start(withGameURL gameURL: URL,
+               metalView: MTKView,
+               metalViewFrame: CGRect,
+               topRect: CGRect,
+               bottomRect: CGRect,
+               mute: Bool,
+               resolution: GameOption.Resolution = .one,
+               jit: Bool = false,
+               accurateShaders: Bool = false,
+               language: Int = -1,
+               renderRightEye: Bool = false,
+               advancedMode: Bool = Settings.defalut.threeDSAdvancedSettingMode) {
+        NSLog("[ROOM-C-DIAG] ThreeDS.start ENTER ROM=%@ jit=%d advancedMode=%d", gameURL.lastPathComponent, jit ? 1 : 0, advancedMode ? 1 : 0)
+        defer { NSLog("[ROOM-C-DIAG] ThreeDS.start RETURN (asynchronous boot pending)") }
+        self.topRect = topRect
+        self.bottomRect = bottomRect
+        self.gameURL = gameURL
+        self.isAdvancedMode = advancedMode
+        var appendConfig: [String: Any] = ["ManicEMU.audioMuted": mute, "ManicEMU.resolutionFactor": resolution.rawValue < GameOption.Resolution.one.rawValue ? 1 : resolution.rawValue]
+        if jit {
+            appendConfig["ManicEMU.cpuJIT"] = true
+            switch Settings.defalut.threeDSMode {
+            case .compatibility:
+                appendConfig["ManicEMU.cpuClockPercentage"] = 60
+            case .performance:
+                appendConfig["ManicEMU.cpuClockPercentage"] = 50
+            case .quality:
+                appendConfig["ManicEMU.cpuClockPercentage"] = 75
+            }
+        } else {
+            appendConfig["ManicEMU.cpuJIT"] = false
+            switch Settings.defalut.threeDSMode {
+            case .performance:
+                appendConfig["ManicEMU.cpuClockPercentage"] = 15
+            case .compatibility:
+                appendConfig["ManicEMU.cpuClockPercentage"] = 20
+            case .quality:
+                appendConfig["ManicEMU.cpuClockPercentage"] = 25
+            }
+        }
+        if accurateShaders {
+            appendConfig["ManicEMU.useShadersAccurateMul"] = true
+        } else {
+            appendConfig["ManicEMU.useShadersAccurateMul"] = false
+        }
+        if renderRightEye {
+            appendConfig["ManicEMU.disableRightEyeRender"] = false
+        } else {
+            appendConfig["ManicEMU.disableRightEyeRender"] = true
+        }
+        appendConfig["ManicEMU.regionValue"] = language
+#if DEBUG
+        appendConfig["ManicEMU.logLevel"] = 0
+#else
+        appendConfig["ManicEMU.logLevel"] = 6
+#endif
+        NSLog("[ROOM-C-DIAG] ThreeDS.updateConfig ENTER")
+        updateConfig(appendConfig)
+        NSLog("[ROOM-C-DIAG] ThreeDS.updateConfig RETURN")
+        NSLog("[ROOM-C-DIAG] ThreeDS.allocateVulkanLibrary ENTER")
+        citraCore.allocateVulkanLibrary()
+        NSLog("[ROOM-C-DIAG] ThreeDS.allocateVulkanLibrary RETURN")
+        self.metalView = metalView
+        let metalLayer = metalView.layer as! CAMetalLayer
+        NSLog("[ROOM-C-DIAG] ThreeDS.allocateMetalLayer ENTER")
+        citraCore.allocateMetalLayer(for: metalLayer, with: metalViewFrame.size, isSecondary: false)
+        NSLog("[ROOM-C-DIAG] ThreeDS.allocateMetalLayer RETURN")
+        applyCurrentMotionRotation()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            Thread.setThreadPriority(1.0)
+            NSLog("[ROOM-C-DIAG] ThreeDS boot dispatch ENTER")
+            Thread.detachNewThread {
+                NSLog("[ROOM-C-DIAG] insertCartridgeAndBoot ENTER jitAvailable=%d", LibretroCore.jitAvailable() ? 1 : 0)
+                self.citraCore.insertCartridgeAndBoot(with: gameURL, advancedMode: advancedMode, jitSupport: LibretroCore.jitAvailable())
+                NSLog("[ROOM-C-DIAG] insertCartridgeAndBoot RETURN")
+            }
+            NSLog("[ROOM-C-DIAG] ThreeDS boot dispatch RETURN (worker may still run)")
+        }
+        DispatchQueue.main.asyncAfter(delay: 3.25) {
+            self.citraCore.orientationChange(with: UIDevice.currentOrientation, using: metalView)
+            self.enableControl = true
+        }
+    }
+    
+    func destory() {
+        citraCore.deallocateVulkanLibrary()
+        citraCore.deallocateMetalLayers()
+    }
+    
+    override func stop() {
+        citraCore.stop()
+    }
+    
+    override func pause() {
+        if citraCore.stopped() {
+            return
+        }
+        if !citraCore.isPaused() {
+            citraCore.pausePlay(false)
+        }
+    }
+    
+    var isPaused: Bool {
+        citraCore.isPaused()
+    }
+    
+    override func resume() {
+        if citraCore.stopped() {
+            return
+        }
+        if citraCore.isPaused() {
+            citraCore.pausePlay(true)
+        }
+    }
+    
+    var saveStateCount: Int {
+        return citraCore.saveStateCount
+    }
+    
+    func addSaveState(fileUrl: URL, slot: UInt32) {
+        if let path = citraCore.saveStatePathForRunningGame(slot: slot) {
+            try? FileManager.safeCopyItem(at: fileUrl, to: URL(fileURLWithPath: path), shouldReplace: true)
+        }
+    }
+    
+    func saveState() -> (isSuccess: Bool, path: String) {
+        let state = citraCore.saveState()
+        return (state.isSuccess, state.path)
+    }
+    
+    @discardableResult func loadState(_ slot: UInt32? = nil) -> Bool {
+        if let slot {
+            return citraCore.loadState(slot)
+        } else {
+            return citraCore.loadState()
+        }
+    }
+    
+    func enableVolume() {
+        updateConfig(["ManicEMU.audioMuted": false])
+    }
+    
+    func disableVolume() {
+        updateConfig(["ManicEMU.audioMuted": true])
+    }
+    
+    
+    func gameInputToCoreInput(gameInput: ThreeDSGameInput) -> CitraVirtualControllerButtonType {
+        if gameInput == .a { return .A }
+        else if gameInput == .b { return .B }
+        else if gameInput == .x { return .X }
+        else if gameInput == .y { return .Y }
+        else if gameInput == .start { return .start }
+        else if gameInput == .select { return .select }
+        else if gameInput == .l2 { return .triggerZL }
+        else if gameInput == .r2 { return .triggerZR }
+        else if gameInput == .up { return .directionalPadUp }
+        else if gameInput == .down { return .directionalPadDown }
+        else if gameInput == .left { return .directionalPadLeft }
+        else if gameInput == .right { return .directionalPadRight }
+        else if gameInput == .l1 { return .triggerL }
+        else if gameInput == .r1 { return .triggerR }
+        else { return .debug }
+    }
+    
+    override func activateInput(_ input: Int, value: Double, playerIndex: Int) {
+        guard enableControl else { return }
+        /**
+         摇杆坐标
+         0,1
+         
+   -1,0  0,0  1,0
+         
+         0,-1
+         */
+        if input == ThreeDSGameInput.leftThumbstickUp || input == ThreeDSGameInput.leftThumbstickDown {
+
+            thumbstickPosition.y = input == ThreeDSGameInput.leftThumbstickUp ? value : -value
+            citraCore.thumbstickMoved(.circlePad, x: Float(thumbstickPosition.x), y: Float(thumbstickPosition.y))
+            
+        } else if input == ThreeDSGameInput.leftThumbstickLeft || input == ThreeDSGameInput.leftThumbstickRight {
+            
+            thumbstickPosition.x = input == ThreeDSGameInput.leftThumbstickRight ? value : -value
+            citraCore.thumbstickMoved(.circlePad, x: Float(thumbstickPosition.x), y: Float(thumbstickPosition.y))
+            
+        } else if input == ThreeDSGameInput.rightThumbstickUp || input == ThreeDSGameInput.rightThumbstickDown {
+            
+            cstickPosition.y = input == ThreeDSGameInput.rightThumbstickUp ? value : -value
+            citraCore.thumbstickMoved(.cStick, x: Float(cstickPosition.x), y: Float(cstickPosition.y))
+            
+        } else if input == ThreeDSGameInput.rightThumbstickLeft || input == ThreeDSGameInput.rightThumbstickRight {
+            
+            cstickPosition.x = input == ThreeDSGameInput.rightThumbstickRight ? value : -value
+            citraCore.thumbstickMoved(.cStick, x: Float(cstickPosition.x), y: Float(cstickPosition.y))
+            
+        } else if input == ThreeDSGameInput.touchScreenX || input == ThreeDSGameInput.touchScreenY {
+            if input == ThreeDSGameInput.touchScreenX {
+                touchPosition.x = value * bottomRect.width + bottomRect.minX
+            }
+            if input == ThreeDSGameInput.touchScreenY {
+                touchPosition.y = value * bottomRect.height + bottomRect.minY
+            }
+            if touchPosition.x != 0 && touchPosition.y != 0 {
+                citraCore.touchBegan(at: touchPosition)
+                citraCore.touchMoved(at: touchPosition)
+            }
+            
+        } else {
+            if let gameInput = ThreeDSGameInput(rawValue: input) {
+                let type = gameInputToCoreInput(gameInput: gameInput)
+                if type != .debug {
+                    citraCore.virtualControllerButtonDown(type)
+                }
+            }
+            
+        }
+    }
+    
+    override func deactivateInput(_ input: Int, playerIndex: Int) {
+        guard enableControl else { return }
+        if input == ThreeDSGameInput.leftThumbstickUp || input == ThreeDSGameInput.leftThumbstickDown {
+            thumbstickPosition.y = 0
+            citraCore.thumbstickMoved(.circlePad, x: Float(thumbstickPosition.x), y: Float(thumbstickPosition.y))
+        } else if input == ThreeDSGameInput.leftThumbstickLeft || input == ThreeDSGameInput.leftThumbstickRight {
+            thumbstickPosition.x = 0
+            citraCore.thumbstickMoved(.circlePad, x: Float(thumbstickPosition.x), y: Float(thumbstickPosition.y))
+        } else if input == ThreeDSGameInput.rightThumbstickUp || input == ThreeDSGameInput.rightThumbstickDown {
+            cstickPosition.y = 0
+            citraCore.thumbstickMoved(.cStick, x: Float(cstickPosition.x), y: Float(cstickPosition.y))
+        } else if input == ThreeDSGameInput.rightThumbstickLeft || input == ThreeDSGameInput.rightThumbstickRight {
+            cstickPosition.x = 0
+            citraCore.thumbstickMoved(.cStick, x: Float(cstickPosition.x), y: Float(cstickPosition.y))
+        } else if input == ThreeDSGameInput.touchScreenX || input == ThreeDSGameInput.touchScreenY {
+            touchPosition = .zero
+            citraCore.touchEnded()
+            
+        }  else {
+            if let gameInput = ThreeDSGameInput(rawValue: input) {
+                let type = gameInputToCoreInput(gameInput: gameInput)
+                if type != .debug {
+                    citraCore.virtualControllerButtonUp(type)
+                }
+            }
+        }
+    }
+    
+    func updateViews(topRect: CGRect, bottomRect: CGRect, isAirPlay: Bool = false) {
+        self.topRect = topRect
+        self.bottomRect = bottomRect
+        updateConfig(buildLayoutConfig())
+        DispatchQueue.main.asyncAfter(delay: 0.75) {
+            if let metalView = self.metalView {
+                self.citraCore.orientationChange(with: isAirPlay ? .landscapeLeft : UIDevice.currentOrientation, using: metalView)
+            }
+        }
+    }
+    
+    func reload() {
+        citraCore.reset()
+    }
+
+    func updateConfig(_ updates: [String: Any] = [:]) {
+        var defaultConfigs: [String: Any]
+        switch Settings.defalut.threeDSMode {
+        case .performance:
+            if updates.count > 0 {
+                updates.forEach { key, value in
+                    PerformanceConfigs[key] = value
+                }
+            }
+            defaultConfigs = PerformanceConfigs
+            
+        case .compatibility:
+            if updates.count > 0 {
+                updates.forEach { key, value in
+                    CompatibilityConfigs[key] = value
+                }
+            }
+            defaultConfigs = CompatibilityConfigs
+            
+        case .quality:
+            if updates.count > 0 {
+                updates.forEach { key, value in
+                    QualityConfigs[key] = value
+                }
+            }
+            defaultConfigs = QualityConfigs
+        }
+        
+        defaultConfigs.forEach { key, value in
+            UserDefaults.standard.set(value, forKey: "\(key)")
+        }
+        UserDefaults.standard.synchronize()
+        citraCore.updateSettings(advancedMode: isAdvancedMode)
+    }
+    
+    private func buildLayoutConfig() -> [String: Any] {
+        let layout: [String: Any]
+        
+        layout = ["ManicEMU.customTopLeft" : topRect.minX,
+                  "ManicEMU.customTopTop" : topRect.minY,
+                  "ManicEMU.customTopRight" : topRect.minX + topRect.width,
+                 "ManicEMU.customTopBottom" : topRect.minY + topRect.height,
+                  "ManicEMU.customBottomLeft" : bottomRect.minX,
+                  "ManicEMU.customBottomTop" : bottomRect.minY,
+                  "ManicEMU.customBottomRight" : bottomRect.minX + bottomRect.width,
+                  "ManicEMU.customBottomBottom" : bottomRect.minY + bottomRect.height]
+        return layout
+    }
+    
+    
+    private lazy var PerformanceConfigs: [String: Any] = {
+        [
+            "ManicEMU.cpuClockPercentage" : 15,
+            "ManicEMU.new3DS" : false,
+            "ManicEMU.lleApplets" : false,
+            "ManicEMU.regionValue" : -1,
+            "ManicEMU.layoutOption" : 0,
+            "ManicEMU.customLayout" : true,
+            "ManicEMU.spirvShaderGeneration" : true,
+            "ManicEMU.useAsyncShaderCompilation" : false,
+            "ManicEMU.useAsyncPresentation" : true,
+            "ManicEMU.useHardwareShaders" : true,
+            "ManicEMU.useDiskShaderCache" : true,
+            "ManicEMU.useShadersAccurateMul" : false,
+            "ManicEMU.useNewVSync" : true,
+            "ManicEMU.useShaderJIT" : false,
+            "ManicEMU.resolutionFactor" : 1,
+            "ManicEMU.textureFilter" : 0,
+            "ManicEMU.textureSampling" : 0,
+            "ManicEMU.render3D" : 0,
+            "ManicEMU.factor3D" : 0,
+            "ManicEMU.monoRender" : 0,
+            "ManicEMU.preloadTextures" : false,
+            "ManicEMU.redEyeRender" : false,
+            "ManicEMU.audioMuted" : false,
+            "ManicEMU.audioEmulation" : 0,
+            "ManicEMU.audioStretching" : false,
+            "ManicEMU.realtimeAudio": true,
+            "ManicEMU.outputType" : 3,
+            "ManicEMU.inputType" : 4,
+            "ManicEMU.webAPIURL" : "http://88.198.47.47:5000"
+        ] + buildLayoutConfig()
+    }()
+    
+    private lazy var CompatibilityConfigs: [String: Any] = {
+        [
+            "ManicEMU.cpuClockPercentage" : 20,
+            "ManicEMU.new3DS" : true,
+            "ManicEMU.lleApplets" : false,
+            "ManicEMU.regionValue" : -1,
+            "ManicEMU.layoutOption" : 0,
+            "ManicEMU.customLayout" : true,
+            "ManicEMU.customTopLeft" : 0,
+            "ManicEMU.customTopTop" : 0,
+            "ManicEMU.spirvShaderGeneration" : true,
+            "ManicEMU.useAsyncShaderCompilation" : false,
+            "ManicEMU.useAsyncPresentation" : true,
+            "ManicEMU.useHardwareShaders" : true,
+            "ManicEMU.useDiskShaderCache" : true,
+            "ManicEMU.useShadersAccurateMul" : false,
+            "ManicEMU.useNewVSync" : true,
+            "ManicEMU.useShaderJIT" : false,
+            "ManicEMU.resolutionFactor" : 1,
+            "ManicEMU.textureFilter" : 0,
+            "ManicEMU.textureSampling" : 0,
+            "ManicEMU.render3D" : 0,
+            "ManicEMU.factor3D" : 0,
+            "ManicEMU.monoRender" : 0,
+            "ManicEMU.preloadTextures" : false,
+            "ManicEMU.redEyeRender" : false,
+            "ManicEMU.audioMuted" : false,
+            "ManicEMU.audioEmulation" : 0, //"HLE" : 0, "LLE" : 1, "LLE (Multithreaded)" : 2
+            "ManicEMU.audioStretching" : false,
+            "ManicEMU.realtimeAudio": true,
+            "ManicEMU.outputType" : 3, // Auto = 0, Null = 1, Cubeb = 2, OpenAL = 3, SDL3 = 4
+            "ManicEMU.inputType" : 4, // Auto = 0, Null = 1, Static = 2, Cubeb = 3, OpenAL = 4
+            "ManicEMU.webAPIURL" : "http://88.198.47.47:5000"
+        ] + buildLayoutConfig()
+    }()
+    
+    private lazy var QualityConfigs: [String: Any] = {
+        [
+            "ManicEMU.cpuClockPercentage" : 25,
+            "ManicEMU.new3DS" : true,
+            "ManicEMU.lleApplets" : false,
+            "ManicEMU.regionValue" : -1,
+            "ManicEMU.layoutOption" : 0,
+            "ManicEMU.customLayout" : true,
+            "ManicEMU.customTopLeft" : 0,
+            "ManicEMU.customTopTop" : 0,
+            "ManicEMU.spirvShaderGeneration" : true,
+            "ManicEMU.useAsyncShaderCompilation" : false,
+            "ManicEMU.useAsyncPresentation" : true,
+            "ManicEMU.useHardwareShaders" : true,
+            "ManicEMU.useDiskShaderCache" : true,
+            "ManicEMU.useShadersAccurateMul" : false,
+            "ManicEMU.useNewVSync" : true,
+            "ManicEMU.useShaderJIT" : false,
+            "ManicEMU.resolutionFactor" : 1,
+            "ManicEMU.textureFilter" : 0,
+            "ManicEMU.textureSampling" : 0,
+            "ManicEMU.render3D" : 0,
+            "ManicEMU.factor3D" : 0,
+            "ManicEMU.monoRender" : 0,
+            "ManicEMU.preloadTextures" : false,
+            "ManicEMU.redEyeRender" : false,
+            "ManicEMU.audioMuted" : false,
+            "ManicEMU.audioEmulation" : 0,
+            "ManicEMU.audioStretching" : false,
+            "ManicEMU.realtimeAudio": true,
+            "ManicEMU.outputType" : 3,
+            "ManicEMU.inputType" : 4,
+            "ManicEMU.webAPIURL" : "http://88.198.47.47:5000"
+        ] + buildLayoutConfig()
+    }()
+}
+
+class AzaharEmulatorBridge : EmulatorBridgeBase {
+    
+    static let shared = AzaharEmulatorBridge()
+    
+    private var thumbstickPosition: CGPoint = .zero
+    private var cstickPosition: CGPoint = .zero
+    private var touchPointX: CGFloat? = nil
+    private var touchPointY: CGFloat? = nil
+    var touchInputFrame: CGRect = .zero
+    
+    override func activateInput(_ input: Int, value: Double, playerIndex: Int) {
+        /**
+         摇杆坐标
+         0,1
+         
+   -1,0  0,0  1,0
+         
+         0,-1
+         */
+        if input == ThreeDSGameInput.leftThumbstickUp || input == ThreeDSGameInput.leftThumbstickDown {
+            
+            thumbstickPosition.y = input == ThreeDSGameInput.leftThumbstickUp ? value : -value
+            LibretroCore.sharedInstance().moveStick(true, x: thumbstickPosition.x, y: thumbstickPosition.y, playerIndex: UInt32(playerIndex))
+            
+            
+        } else if input == ThreeDSGameInput.leftThumbstickLeft || input == ThreeDSGameInput.leftThumbstickRight {
+            
+            thumbstickPosition.x = input == ThreeDSGameInput.leftThumbstickRight ? value : -value
+            LibretroCore.sharedInstance().moveStick(true, x: thumbstickPosition.x, y: thumbstickPosition.y, playerIndex: UInt32(playerIndex))
+            
+        } else if input == ThreeDSGameInput.rightThumbstickUp || input == ThreeDSGameInput.rightThumbstickDown {
+            
+            cstickPosition.y = input == ThreeDSGameInput.rightThumbstickUp ? value : -value
+            LibretroCore.sharedInstance().moveStick(false, x: cstickPosition.x, y: cstickPosition.y, playerIndex: UInt32(playerIndex))
+            
+        } else if input == ThreeDSGameInput.rightThumbstickLeft || input == ThreeDSGameInput.rightThumbstickRight {
+            
+            cstickPosition.x = input == ThreeDSGameInput.rightThumbstickRight ? value : -value
+            LibretroCore.sharedInstance().moveStick(false, x: cstickPosition.x, y: cstickPosition.y, playerIndex: UInt32(playerIndex))
+            
+        } else if input == ThreeDSGameInput.touchScreenX || input == ThreeDSGameInput.touchScreenY {
+            if input == ThreeDSGameInput.touchScreenX {
+                touchPointX = value
+            } else if input == ThreeDSGameInput.touchScreenY {
+                touchPointY = value
+            }
+            if let x = touchPointX, let y = touchPointY {
+                let touchPoint = CGPoint(x: touchInputFrame.minX + touchInputFrame.width*x, y: touchInputFrame.minY + touchInputFrame.height*y)
+                
+#if DEBUG
+                Log.debug("🎮 \(objectInfo(self))  触摸屏幕:\(touchPoint)")
+#endif
+                LibretroCore.sharedInstance().sendTouchEventX(touchPoint.x, y: touchPoint.y)
+                touchPointX = nil
+                touchPointY = nil
+            }
+        } else if let gameInput = ThreeDSGameInput(rawValue: input),
+                  let libretroButton = gameInputToCoreInput(gameInput: gameInput) {
+#if DEBUG
+                Log.debug("🎮 \(objectInfo(self)) 点击了:\(gameInput)")
+#endif
+                LibretroCore.sharedInstance().press(libretroButton, playerIndex: UInt32(playerIndex))
+        }
+    }
+    
+    func gameInputToCoreInput(gameInput: ThreeDSGameInput) -> LibretroButton? {
+        if gameInput == .a { return .A }
+        else if gameInput == .b { return .B }
+        else if gameInput == .x { return .X }
+        else if gameInput == .y { return .Y }
+        else if gameInput == .start { return .start }
+        else if gameInput == .select { return .select }
+        else if gameInput == .l1 { return .L1 }
+        else if gameInput == .l2 { return .L2 }
+        else if gameInput == .r1 { return .R1 }
+        else if gameInput == .r2 { return .R2 }
+        else if gameInput == .up { return .up }
+        else if gameInput == .down { return .down }
+        else if gameInput == .left { return .left }
+        else if gameInput == .right { return .right }
+        else { return nil }
+    }
+    
+    override func deactivateInput(_ input: Int, playerIndex: Int) {
+        if input == ThreeDSGameInput.leftThumbstickUp || input == ThreeDSGameInput.leftThumbstickDown {
+            thumbstickPosition.y = 0
+            LibretroCore.sharedInstance().moveStick(true, x: thumbstickPosition.x, y: thumbstickPosition.y, playerIndex: UInt32(playerIndex))
+        } else if input == ThreeDSGameInput.leftThumbstickLeft || input == ThreeDSGameInput.leftThumbstickRight {
+            thumbstickPosition.x = 0
+            LibretroCore.sharedInstance().moveStick(true, x: thumbstickPosition.x, y: thumbstickPosition.y, playerIndex: UInt32(playerIndex))
+        } else if input == ThreeDSGameInput.rightThumbstickUp || input == ThreeDSGameInput.rightThumbstickDown {
+            cstickPosition.y = 0
+            LibretroCore.sharedInstance().moveStick(false, x: cstickPosition.x, y: cstickPosition.y, playerIndex: UInt32(playerIndex))
+        } else if input == ThreeDSGameInput.rightThumbstickLeft || input == ThreeDSGameInput.rightThumbstickRight {
+            cstickPosition.x = 0
+            LibretroCore.sharedInstance().moveStick(false, x: cstickPosition.x, y: cstickPosition.y, playerIndex: UInt32(playerIndex))
+        } else if input == ThreeDSGameInput.touchScreenX || input == ThreeDSGameInput.touchScreenY {
+            if input == ThreeDSGameInput.touchScreenX {
+                touchPointX = nil
+            } else if input == ThreeDSGameInput.touchScreenY {
+                touchPointY = nil
+            }
+            if touchPointX == nil, touchPointY == nil {
+                LibretroCore.sharedInstance().releaseTouchEvent()
+            }
+        } else if let gameInput = ThreeDSGameInput(rawValue: input),
+                  let libretroButton = gameInputToCoreInput(gameInput: gameInput) {
+            LibretroCore.sharedInstance().release(libretroButton, playerIndex: UInt32(playerIndex))
+        }
+    }
+}

@@ -1,0 +1,171 @@
+--- a/ui/drivers/cocoa/LibretroCore.h
++++ b/ui/drivers/cocoa/LibretroCore.h
+@@ -197,6 +197,8 @@
+ - (void)setFastforwardFrameSkip:(BOOL)frameSkip;
+ - (void)set3DSCustomLayout:(NSString *_Nullable)layout;
+ - (void)setLibretroLogMonitor:(BOOL)enable;
++/// Temporary C-only diagnostic routing; does not enable JIT or change core settings.
++- (void)setRoomCDiagnostics:(BOOL)enable;
+ - (void)loadAmiibo:(NSString *_Nonnull)path;
+ - (BOOL)isSearchingAmiibo;
+ - (void)registerAzaharKeyboard:(void(^ _Nullable)(AzaharKeyboardConfig *_Nonnull config))callback;
+--- a/ui/drivers/LibretroCore.m
++++ b/ui/drivers/LibretroCore.m
+@@ -1,3 +1,4 @@
++#include <stdatomic.h>
+ //
+ //  LibretroCore.m
+ //  LibretroCore
+@@ -181,7 +182,23 @@
+     return [[[NSBundle mainBundle] objectForInfoDictionaryKey:@"ManicRoomBuildMode"] isEqual:@"experimental"];
+ }
+ 
++static atomic_bool roomCDiagnosticActive = false;
++void manic_room_diag(const char *format, ...) {
++    if (!atomic_load(&roomCDiagnosticActive)) return;
++    va_list args; va_start(args, format);
++    char buffer[2048]; vsnprintf(buffer, sizeof(buffer), format, args); va_end(args);
++    NSLog(@"[ROOM-C-DIAG] %s", buffer);
++}
++
+ @implementation LibretroCore
++
++- (void)setRoomCDiagnostics:(BOOL)enable {
++    atomic_store(&roomCDiagnosticActive, enable && ManicRoomExperiment());
++    if (atomic_load(&roomCDiagnosticActive)) {
++        log_register_callback(libretroLogCallback);
++        manic_room_diag("Libretro bridge diagnostics enabled");
++    }
++}
+ 
+ + (instancetype)sharedInstance {
+     static LibretroCore *instance = nil;
+@@ -227,7 +244,9 @@
+         }
+     }
+     self.isRunning = YES;
++    manic_room_diag("Libretro frontend start ENTER");
+     [[self getRetroArch] startWithCustomSaveDir:customSaveDir];
++    manic_room_diag("Libretro frontend start RETURN");
+     cheevos_event_register_callback(cheevosDidTrigger);
+     netplay_event_register_callback(netplayDidTrigger);
+     shutdown_register_callback(shutdownCallback);
+@@ -271,6 +290,7 @@
+     [self registerAzaharKeyboard:nil];
+     [self registerEKA2L1InputDialog:nil questionDialog:nil];
+     [[self getRetroArch] stop];
++    atomic_store(&roomCDiagnosticActive, false);
+ }
+ 
+ - (void)mute:(BOOL)mute {
+@@ -356,7 +376,10 @@
+     if (!LibretroPathLooksLikeEKA2L1(corePath)) {
+         LibretroEKA2L1ShutdownManagement();
+     }
+-    return [[self getRetroArch] loadGame:gamePath corePath:corePath completion:completion];
++    manic_room_diag("bridge loadGame ENTER core=%s ROM=%s", corePath.lastPathComponent.UTF8String, gamePath.lastPathComponent.UTF8String);
++    BOOL loaded = [[self getRetroArch] loadGame:gamePath corePath:corePath completion:completion];
++    manic_room_diag("bridge loadGame RETURN result=%d", loaded);
++    return loaded;
+ }
+ 
+ - (void)loadCoreWithoutContent:(NSString *_Nonnull)corePath {
+@@ -1065,6 +1088,16 @@
+     vsnprintf(buffer, sizeof(buffer), fmt, args);
+     NSString *logMessage = [NSString stringWithUTF8String:buffer] ?: @"";
+     
++    if (atomic_load(&roomCDiagnosticActive)) {
++        // Forward all received levels. Redact paths from upstream messages and prefix each line.
++        static NSRegularExpression *paths;
++        static dispatch_once_t once;
++        dispatch_once(&once, ^{ paths = [NSRegularExpression regularExpressionWithPattern:@"(?:file://)?/[^\\s\"'<>]+" options:0 error:nil]; });
++        NSString *safe = [paths stringByReplacingMatchesInString:logMessage options:0 range:NSMakeRange(0, logMessage.length) withTemplate:@"[path]"];
++        for (NSString *line in [safe componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
++            if (line.length) NSLog(@"[ROOM-C-DIAG] libretro level=%d %@", (int)level, line);
++        }
++    }
+     if (!g_enableMonitorLibretroLog) {
+         return;
+     }
+--- a/runloop.c
++++ b/runloop.c
+@@ -248,6 +248,13 @@
+ #include "ai/game_ai.h"
+ #endif
+ 
++#if defined(HAVE_COCOATOUCH)
++extern void manic_room_diag(const char *format, ...);
++#define ROOM_C_DIAG(...) manic_room_diag(__VA_ARGS__)
++#else
++#define ROOM_C_DIAG(...) ((void)0)
++#endif
++
+ #define SHADER_FILE_WATCH_DELAY_MSEC 500
+ 
+ #define QUIT_DELAY_USEC 3 * 1000000 /* 3 seconds */
+@@ -265,6 +272,7 @@
+ #define SYMBOL(x) do { \
+    function_t func = dylib_proc(lib_handle_local, #x); \
+    memcpy(&current_core->x, &func, sizeof(func)); \
++   ROOM_C_DIAG("symbol resolve %s success=%d", #x, current_core->x != NULL); \
+    if (!current_core->x) { RARCH_ERR("Failed to load symbol: \"%s\"\n", #x); retroarch_fail(1, "runloop_init_libretro_symbols()"); } \
+ } while (0)
+ #else
+@@ -3831,18 +3839,21 @@
+                RARCH_LOG("[Core]: Loading dynamic libretro core from: \"%s\"\n",
+                      path);
+ 
++               ROOM_C_DIAG("dynamic core load ENTER");
+                if (!(runloop_st->lib_handle = load_dynamic_core(
+                            path,
+                            path_get_ptr(RARCH_PATH_CORE),
+                            path_get_realsize(RARCH_PATH_CORE)
+                            )))
+                {
++                  ROOM_C_DIAG("dynamic core load RETURN success=0");
+                   const char *_msg = msg_hash_to_str(MSG_FAILED_TO_OPEN_LIBRETRO_CORE);
+                   RARCH_ERR("%s: \"%s\"\nError(s): %s\n", _msg, path, dylib_error());
+                   runloop_msg_queue_push(_msg, strlen(_msg), 1, 180, true, NULL,
+                         MESSAGE_QUEUE_ICON_DEFAULT, MESSAGE_QUEUE_CATEGORY_INFO);
+                   return false;
+                }
++               ROOM_C_DIAG("dynamic core load RETURN success=1");
+                lib_handle_local = runloop_st->lib_handle;
+             }
+ #ifdef HAVE_RUNAHEAD
+@@ -3860,7 +3871,9 @@
+ #endif
+ #endif
+ 
++            ROOM_C_DIAG("symbol resolve ENTER");
+             CORE_SYMBOLS(SYMBOL);
++            ROOM_C_DIAG("symbol resolve RETURN success=1");
+          }
+          break;
+       case CORE_TYPE_DUMMY:
+@@ -4903,7 +4916,9 @@
+ 
+    video_st->frame_cache_data              = NULL;
+ 
++   ROOM_C_DIAG("frontend retro_init ENTER");
+    runloop_st->current_core.retro_init();
++   ROOM_C_DIAG("frontend retro_init RETURN (void)");
+    runloop_st->current_core.flags         |= RETRO_CORE_FLAG_INITED;
+ 
+    /* Attempt to set initial disk index */
+@@ -7820,6 +7835,7 @@
+ 
+    set_save_state_in_background(false);
+ 
++   ROOM_C_DIAG("frontend retro_load_game ENTER");
+    if (load_info && load_info->special)
+       game_loaded = runloop_st->current_core.retro_load_game_special(
+             load_info->special->id, load_info->info, load_info->content->size);
+@@ -7828,6 +7844,7 @@
+    else if (content_get_flags() & CONTENT_ST_FLAG_CORE_DOES_NOT_NEED_CONTENT)
+       game_loaded = runloop_st->current_core.retro_load_game(NULL);
+ 
++   ROOM_C_DIAG("frontend retro_load_game RETURN result=%d", game_loaded);
+    if (game_loaded)
+    {
+       /* If 'game_loaded' is true at this point, then

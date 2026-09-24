@@ -1,3 +1,4 @@
+#include <stdatomic.h>
 //
 //  LibretroCore.m
 //  LibretroCore
@@ -181,7 +182,23 @@ static BOOL ManicRoomExperiment(void) {
     return [[[NSBundle mainBundle] objectForInfoDictionaryKey:@"ManicRoomBuildMode"] isEqual:@"experimental"];
 }
 
+static atomic_bool roomCDiagnosticActive = false;
+void manic_room_diag(const char *format, ...) {
+    if (!atomic_load(&roomCDiagnosticActive)) return;
+    va_list args; va_start(args, format);
+    char buffer[2048]; vsnprintf(buffer, sizeof(buffer), format, args); va_end(args);
+    NSLog(@"[ROOM-C-DIAG] %s", buffer);
+}
+
 @implementation LibretroCore
+
+- (void)setRoomCDiagnostics:(BOOL)enable {
+    atomic_store(&roomCDiagnosticActive, enable && ManicRoomExperiment());
+    if (atomic_load(&roomCDiagnosticActive)) {
+        log_register_callback(libretroLogCallback);
+        manic_room_diag("Libretro bridge diagnostics enabled");
+    }
+}
 
 + (instancetype)sharedInstance {
     static LibretroCore *instance = nil;
@@ -227,7 +244,9 @@ static BOOL ManicRoomExperiment(void) {
         }
     }
     self.isRunning = YES;
+    manic_room_diag("Libretro frontend start ENTER");
     [[self getRetroArch] startWithCustomSaveDir:customSaveDir];
+    manic_room_diag("Libretro frontend start RETURN");
     cheevos_event_register_callback(cheevosDidTrigger);
     netplay_event_register_callback(netplayDidTrigger);
     shutdown_register_callback(shutdownCallback);
@@ -271,6 +290,7 @@ static BOOL ManicRoomExperiment(void) {
     [self registerAzaharKeyboard:nil];
     [self registerEKA2L1InputDialog:nil questionDialog:nil];
     [[self getRetroArch] stop];
+    atomic_store(&roomCDiagnosticActive, false);
 }
 
 - (void)mute:(BOOL)mute {
@@ -356,7 +376,10 @@ static BOOL ManicRoomExperiment(void) {
     if (!LibretroPathLooksLikeEKA2L1(corePath)) {
         LibretroEKA2L1ShutdownManagement();
     }
-    return [[self getRetroArch] loadGame:gamePath corePath:corePath completion:completion];
+    manic_room_diag("bridge loadGame ENTER core=%s ROM=%s", corePath.lastPathComponent.UTF8String, gamePath.lastPathComponent.UTF8String);
+    BOOL loaded = [[self getRetroArch] loadGame:gamePath corePath:corePath completion:completion];
+    manic_room_diag("bridge loadGame RETURN result=%d", loaded);
+    return loaded;
 }
 
 - (void)loadCoreWithoutContent:(NSString *_Nonnull)corePath {
@@ -1065,6 +1088,16 @@ static void libretroLogCallback(enum retro_log_level level, const char *fmt, va_
     vsnprintf(buffer, sizeof(buffer), fmt, args);
     NSString *logMessage = [NSString stringWithUTF8String:buffer] ?: @"";
     
+    if (atomic_load(&roomCDiagnosticActive)) {
+        // Forward all received levels. Redact paths from upstream messages and prefix each line.
+        static NSRegularExpression *paths;
+        static dispatch_once_t once;
+        dispatch_once(&once, ^{ paths = [NSRegularExpression regularExpressionWithPattern:@"(?:file://)?/[^\\s\"'<>]+" options:0 error:nil]; });
+        NSString *safe = [paths stringByReplacingMatchesInString:logMessage options:0 range:NSMakeRange(0, logMessage.length) withTemplate:@"[path]"];
+        for (NSString *line in [safe componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
+            if (line.length) NSLog(@"[ROOM-C-DIAG] libretro level=%d %@", (int)level, line);
+        }
+    }
     if (!g_enableMonitorLibretroLog) {
         return;
     }

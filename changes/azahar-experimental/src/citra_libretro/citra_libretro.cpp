@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include "citra_libretro/room_c_diag.h"
 #include "citra_libretro/room_session.h"
 #include "common/file_util.h"
 #include "core/hle/service/cfg/cfg.h"
@@ -81,6 +82,8 @@ static retro_keyboard_callback_t s_retro_keyboard_callback = nullptr;
 static std::shared_ptr<SoftwareKeyboard::AppleKeyboard> s_apple_keyboard;
 
 void retro_init() {
+    RoomCDiag::Span diag("retro_init");
+    RoomCDiag::frames = 0;
     emu_instance = new CitraLibRetro();
     Common::Log::LibRetroStart(LibRetro::GetLoggingBackend());
     Common::Log::SetGlobalFilter(emu_instance->log_filter);
@@ -113,6 +116,7 @@ void retro_init() {
 }
 
 void retro_deinit() {
+    RoomCDiag::Span diag("retro_deinit");
     LOG_DEBUG(Frontend, "Shutting down core...");
     LibRetro::RoomSession::GameStopped();
     retro_set_keyboard_callback(nullptr);
@@ -138,6 +142,7 @@ unsigned retro_api_version() {
  * Updates Citra's settings with Libretro's.
  */
 static void UpdateSettings() {
+    RoomCDiag::Span diag("UpdateSettings");
     LibRetro::ParseCoreOptions();
 
     struct retro_input_descriptor desc[] = {
@@ -230,7 +235,9 @@ static void UpdateSettings() {
     }
 
     if (!emu_instance->emu_window) {
+    RoomCDiag::Log("EmuWindow creation ENTER");
         emu_instance->emu_window = std::make_unique<EmuWindow_LibRetro>();
+    RoomCDiag::Log("EmuWindow creation RETURN");
     }
 
     // Update the framebuffer sizing.
@@ -243,6 +250,11 @@ static void UpdateSettings() {
  * libretro callback; Called every game tick.
  */
 void retro_run() {
+    const auto diag_frame = ++RoomCDiag::frames;
+    const bool diag_sample = RoomCDiag::Sample(diag_frame);
+    RoomCDiag::Span diag("retro_run", diag_sample);
+    if (diag_sample) RoomCDiag::Log("retro_run call=%llu game_loaded=%d", diag_frame, emu_instance->game_loaded);
+    unsigned long long diag_loop = 0;
     if (!emu_instance->game_loaded) {
         // Game failed to load (e.g. encrypted ROM, bad path).
         // Present an empty frame so RetroArch doesn't hang.
@@ -307,7 +319,11 @@ void retro_run() {
 #endif
 
     while (!emu_instance->emu_window->HasSubmittedFrame()) {
+        const auto diag_iteration = ++diag_loop;
+        const bool diag_inner = diag_sample && (diag_iteration<=3 || diag_iteration%10000==0);
+        if (diag_inner) RoomCDiag::Log("Core.System.RunLoop ENTER frame=%llu iteration=%llu", diag_frame, diag_iteration);
         auto result = Core::System::GetInstance().RunLoop();
+        if (diag_inner) RoomCDiag::Log("Core.System.RunLoop RETURN frame=%llu iteration=%llu status=%d", diag_frame, diag_iteration, int(result));
 
         if (result == Core::System::ResultStatus::ShutdownRequested) {
             // Initial setup (Artic Base) completed — the 3DS requested a reboot,
@@ -398,46 +414,49 @@ static void setup_memory_maps() {
 }
 
 static bool do_load_game() {
+    RoomCDiag::Span diag("do_load_game");
 #ifdef MANIC_ROOM_EXPERIMENT
     if (!FileUtil::GetUserPath(FileUtil::UserPath::UserDir).ends_with("/RoomExperiment-v1/3DS/")) {
         LibRetro::DisplayMessage("Experimental core requires isolated RoomExperiment-v1/3DS storage.");
         LOG_ERROR(Frontend, "Refusing game load: experimental save directory is not configured");
-        return false;
+        return diag.Result(false);
     }
 #endif
+    RoomCDiag::Log("Core.System.Load ENTER");
     const Core::System::ResultStatus load_result{
         Core::System::GetInstance().Load(*emu_instance->emu_window, LibRetro::settings.file_path)};
+    RoomCDiag::Log("Core.System.Load RETURN status=%d (Success=%d)", int(load_result), int(Core::System::ResultStatus::Success));
 
     switch (load_result) {
     case Core::System::ResultStatus::Success:
         break; // Expected case
     case Core::System::ResultStatus::ErrorGetLoader:
         LibRetro::DisplayMessage("Failed to obtain loader for specified ROM!");
-        return false;
+        return diag.Result(false);
     case Core::System::ResultStatus::ErrorLoader:
         LibRetro::DisplayMessage("Failed to load ROM!");
-        return false;
+        return diag.Result(false);
     case Core::System::ResultStatus::ErrorLoader_ErrorEncrypted:
         LibRetro::DisplayMessage("The game that you are trying to load must be decrypted before "
                                  "being used with Azahar.");
-        return false;
+        return diag.Result(false);
     case Core::System::ResultStatus::ErrorLoader_ErrorInvalidFormat:
         LibRetro::DisplayMessage("Error while loading ROM: The ROM format is not supported.");
-        return false;
+        return diag.Result(false);
     case Core::System::ResultStatus::ErrorLoader_ErrorGbaTitle:
         LibRetro::DisplayMessage(
             "Error loading the specified application as it is GBA Virtual Console");
-        return false;
+        return diag.Result(false);
     case Core::System::ResultStatus::ErrorNotInitialized:
         LibRetro::DisplayMessage("CPUCore not initialized");
-        return false;
+        return diag.Result(false);
     case Core::System::ResultStatus::ErrorSystemMode:
         LibRetro::DisplayMessage("Failed to determine system mode!");
-        return false;
+        return diag.Result(false);
     default:
         LibRetro::DisplayMessage(
             ("Unknown error: " + std::to_string(static_cast<int>(load_result))).c_str());
-        return false;
+        return diag.Result(false);
     }
 
     u64 program_id{};
@@ -445,15 +464,17 @@ static bool do_load_game() {
     Core::System::GetInstance().GPU().ApplyPerProgramSettings(program_id);
 
     if (Settings::values.use_disk_shader_cache) {
+        RoomCDiag::Log("LoadDefaultDiskResources ENTER");
         Core::System::GetInstance().GPU().Renderer().Rasterizer()->LoadDefaultDiskResources(
             false, nullptr);
+        RoomCDiag::Log("LoadDefaultDiskResources RETURN");
     }
 
     setup_memory_maps();
     LibRetro::RoomSession::GameReady(Service::CFG::GetConsoleIdHash(Core::System::GetInstance()),
                                     Service::CFG::GetConsoleMacAddress(Core::System::GetInstance()));
 
-    return true;
+    return diag.Result(true);
 }
 
 #ifdef ENABLE_OPENGL
@@ -463,6 +484,7 @@ static void* load_opengl_func(const char* name) {
 #endif
 
 static void context_reset() {
+    RoomCDiag::Span diag("context_reset");
     LOG_DEBUG(Frontend, "context_reset");
 
     switch (Settings::values.graphics_api.GetValue()) {
@@ -498,7 +520,9 @@ static void context_reset() {
 #endif
 #ifdef ENABLE_VULKAN
     case Settings::GraphicsAPI::Vulkan:
+    RoomCDiag::Log("VulkanResetContext ENTER");
         LibRetro::VulkanResetContext();
+    RoomCDiag::Log("VulkanResetContext RETURN");
         break;
 #endif
     default:
@@ -506,7 +530,9 @@ static void context_reset() {
         break;
     }
 
+    RoomCDiag::Log("EmuWindow.CreateContext ENTER");
     emu_instance->emu_window->CreateContext();
+    RoomCDiag::Log("EmuWindow.CreateContext RETURN");
 
     if (!emu_instance->game_loaded) {
         emu_instance->game_loaded = do_load_game();
@@ -539,6 +565,7 @@ void retro_reset() {
  * libretro callback; Called when a game is to be loaded.
  */
 bool retro_load_game(const struct retro_game_info* info) {
+    RoomCDiag::Span diag("retro_load_game");
     LOG_INFO(Frontend, "Starting Azahar RetroArch game...");
 
 #if CITRA_ARCH(x86_64) && CITRA_HAS_SSE42
@@ -546,11 +573,12 @@ bool retro_load_game(const struct retro_game_info* info) {
         LOG_CRITICAL(Frontend, "This CPU does not support SSE4.2, which is required by this build");
         LibRetro::DisplayMessage(
             "This CPU does not support SSE4.2, which is required by this build");
-        return false;
+        return diag.Result(false);
     }
 #endif
 
     UpdateSettings();
+    RoomCDiag::Log("graphics_api=%d (OpenGL=%d Vulkan=%d Software=%d)", int(Settings::values.graphics_api.GetValue()), int(Settings::GraphicsAPI::OpenGL), int(Settings::GraphicsAPI::Vulkan), int(Settings::GraphicsAPI::Software));
     
     // Initialize libretro camera interface
     LibRetro::Camera::InitializeCameraInterface();
@@ -565,12 +593,16 @@ bool retro_load_game(const struct retro_game_info* info) {
     // true, leaving the frontend stuck on a black screen.
     // GetLoader + LoadKernelMemoryMode only read ROM headers — no renderer needed.
     {
+        RoomCDiag::Log("Loader.GetLoader ENTER");
         auto loader = Loader::GetLoader(LibRetro::settings.file_path);
+        RoomCDiag::Log("Loader.GetLoader RETURN success=%d", loader != nullptr);
         if (!loader) {
             LibRetro::DisplayMessage("Failed to obtain loader for the specified ROM.");
-            return false;
+            return diag.Result(false);
         }
+        RoomCDiag::Log("LoadKernelMemoryMode ENTER");
         auto [memory_mode, result] = loader->LoadKernelMemoryMode();
+        RoomCDiag::Log("LoadKernelMemoryMode RETURN status=%d", int(result));
         if (result != Loader::ResultStatus::Success) {
             switch (result) {
             case Loader::ResultStatus::ErrorEncrypted:
@@ -587,7 +619,7 @@ bool retro_load_game(const struct retro_game_info* info) {
                 LibRetro::DisplayMessage("Failed to load ROM metadata.");
                 break;
             }
-            return false;
+            return diag.Result(false);
         }
         // Stash the loader so System::Load can reuse it instead of re-opening
         Core::System::GetInstance().RegisterAppLoaderEarly(loader);
@@ -595,7 +627,7 @@ bool retro_load_game(const struct retro_game_info* info) {
 
     if (!LibRetro::SetPixelFormat(RETRO_PIXEL_FORMAT_XRGB8888)) {
         LibRetro::DisplayMessage("XRGB8888 is not supported.");
-        return false;
+        return diag.Result(false);
     }
 
     emu_instance->emu_window->UpdateLayout();
@@ -620,7 +652,7 @@ bool retro_load_game(const struct retro_game_info* info) {
         emu_instance->hw_render.bottom_left_origin = true;
         if (!LibRetro::SetHWRenderer(&emu_instance->hw_render)) {
             LibRetro::DisplayMessage("Failed to set HW renderer");
-            return false;
+            return diag.Result(false);
         }
         LibRetro::SetFramebufferCallback(emu_instance->hw_render.get_current_framebuffer);
 #endif
@@ -636,7 +668,7 @@ bool retro_load_game(const struct retro_game_info* info) {
         emu_instance->hw_render.cache_context = true;
         if (!LibRetro::SetHWRenderer(&emu_instance->hw_render)) {
             LibRetro::DisplayMessage("Failed to set HW renderer");
-            return false;
+            return diag.Result(false);
         }
 
         // Set up Vulkan context negotiation interface
@@ -651,10 +683,12 @@ bool retro_load_game(const struct retro_game_info* info) {
 #endif
         break;
     case Settings::GraphicsAPI::Software:
-        emu_instance->emu_window->CreateContext();
+        RoomCDiag::Log("EmuWindow.CreateContext ENTER");
+    emu_instance->emu_window->CreateContext();
+    RoomCDiag::Log("EmuWindow.CreateContext RETURN");
         emu_instance->game_loaded = do_load_game();
         if (!emu_instance->game_loaded)
-            return false;
+            return diag.Result(false);
         break;
     }
 
@@ -662,7 +696,7 @@ bool retro_load_game(const struct retro_game_info* info) {
         RETRO_SERIALIZATION_QUIRK_CORE_VARIABLE_SIZE | RETRO_SERIALIZATION_QUIRK_MUST_INITIALIZE;
     LibRetro::SetSerializationQuirks(quirks);
 
-    return true;
+    return diag.Result(true);
 }
 
 void retro_unload_game() {

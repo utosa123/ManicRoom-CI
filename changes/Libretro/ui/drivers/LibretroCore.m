@@ -197,14 +197,41 @@ void manic_room_diag(const char *format, ...) {
 const char *manic_room_experimental_azahar_save_dir(void) {
     if (!ManicRoomExperiment()) return NULL;
     const char *core = path_get(RARCH_PATH_CORE);
-    if (!core) return NULL;
-    const char *last_slash = strrchr(core, '/');
-    if (strcmp(last_slash ? last_slash + 1 : core, "azahar.libretro") != 0) return NULL;
+    NSString *framework = [[NSBundle mainBundle] pathForResource:@"azahar.libretro"
+                                                        ofType:@"framework"
+                                                   inDirectory:@"Frameworks"];
+    if (!core || !framework) {
+        manic_room_diag("frontend SAVE_DIRECTORY isolation rejected corePath=missing");
+        return NULL;
+    }
+    // Manic passes the framework directory to task_push_load_content_with_new_core_from_menu.
+    // Accept only that exact bundle path (or its binary after RetroArch resolves it).
+    BOOL isFramework = strcmp(core, framework.fileSystemRepresentation) == 0;
+    NSString *binary = [framework stringByAppendingPathComponent:@"azahar.libretro"];
+    BOOL isBinary = strcmp(core, binary.fileSystemRepresentation) == 0;
+    if (!isFramework && !isBinary) {
+        manic_room_diag("frontend SAVE_DIRECTORY isolation rejected corePath=other");
+        return NULL;
+    }
     const char *configured = get_custom_save_dir();
-    if (!configured) return NULL;
+    if (!configured) {
+        manic_room_diag("frontend SAVE_DIRECTORY isolation rejected customSaveDir=missing corePath=%s",
+                        isFramework ? "framework" : "binary");
+        return NULL;
+    }
     NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    if (!documents) {
+        manic_room_diag("frontend SAVE_DIRECTORY isolation rejected Documents=missing");
+        return NULL;
+    }
     NSString *expected = [documents stringByAppendingPathComponent:@"RoomExperiment-v1"];
-    if (!documents || strcmp(configured, expected.UTF8String) != 0) return NULL;
+    if (strcmp(configured, expected.fileSystemRepresentation) != 0) {
+        manic_room_diag("frontend SAVE_DIRECTORY isolation rejected customSaveDir=mismatch corePath=%s",
+                        isFramework ? "framework" : "binary");
+        return NULL;
+    }
+    manic_room_diag("frontend SAVE_DIRECTORY isolation accepted corePath=%s customSaveDir=expected",
+                    isFramework ? "framework" : "binary");
     return configured;
 }
 

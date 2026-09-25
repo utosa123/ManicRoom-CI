@@ -102,7 +102,7 @@ index 717fbaa..b6aeb8f 100644
     {
        /* If 'game_loaded' is true at this point, then
 diff --git a/ui/drivers/LibretroCore.m b/ui/drivers/LibretroCore.m
-index f79c16a..2b1af21 100644
+index f79c16a..67821be 100644
 --- a/ui/drivers/LibretroCore.m
 +++ b/ui/drivers/LibretroCore.m
 @@ -1,3 +1,4 @@
@@ -118,7 +118,7 @@ index f79c16a..2b1af21 100644
  #include "../../frontend/frontend.h"
  #include "../../input/drivers/cocoa_input.h"
  #include "../../input/drivers_keyboard/keyboard_event_apple.h"
-@@ -181,8 +183,41 @@ static BOOL ManicRoomExperiment(void) {
+@@ -181,8 +183,68 @@ static BOOL ManicRoomExperiment(void) {
      return [[[NSBundle mainBundle] objectForInfoDictionaryKey:@"ManicRoomBuildMode"] isEqual:@"experimental"];
  }
  
@@ -136,14 +136,41 @@ index f79c16a..2b1af21 100644
 +const char *manic_room_experimental_azahar_save_dir(void) {
 +    if (!ManicRoomExperiment()) return NULL;
 +    const char *core = path_get(RARCH_PATH_CORE);
-+    if (!core) return NULL;
-+    const char *last_slash = strrchr(core, '/');
-+    if (strcmp(last_slash ? last_slash + 1 : core, "azahar.libretro") != 0) return NULL;
++    NSString *framework = [[NSBundle mainBundle] pathForResource:@"azahar.libretro"
++                                                        ofType:@"framework"
++                                                   inDirectory:@"Frameworks"];
++    if (!core || !framework) {
++        manic_room_diag("frontend SAVE_DIRECTORY isolation rejected corePath=missing");
++        return NULL;
++    }
++    // Manic passes the framework directory to task_push_load_content_with_new_core_from_menu.
++    // Accept only that exact bundle path (or its binary after RetroArch resolves it).
++    BOOL isFramework = strcmp(core, framework.fileSystemRepresentation) == 0;
++    NSString *binary = [framework stringByAppendingPathComponent:@"azahar.libretro"];
++    BOOL isBinary = strcmp(core, binary.fileSystemRepresentation) == 0;
++    if (!isFramework && !isBinary) {
++        manic_room_diag("frontend SAVE_DIRECTORY isolation rejected corePath=other");
++        return NULL;
++    }
 +    const char *configured = get_custom_save_dir();
-+    if (!configured) return NULL;
++    if (!configured) {
++        manic_room_diag("frontend SAVE_DIRECTORY isolation rejected customSaveDir=missing corePath=%s",
++                        isFramework ? "framework" : "binary");
++        return NULL;
++    }
 +    NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
++    if (!documents) {
++        manic_room_diag("frontend SAVE_DIRECTORY isolation rejected Documents=missing");
++        return NULL;
++    }
 +    NSString *expected = [documents stringByAppendingPathComponent:@"RoomExperiment-v1"];
-+    if (!documents || strcmp(configured, expected.UTF8String) != 0) return NULL;
++    if (strcmp(configured, expected.fileSystemRepresentation) != 0) {
++        manic_room_diag("frontend SAVE_DIRECTORY isolation rejected customSaveDir=mismatch corePath=%s",
++                        isFramework ? "framework" : "binary");
++        return NULL;
++    }
++    manic_room_diag("frontend SAVE_DIRECTORY isolation accepted corePath=%s customSaveDir=expected",
++                    isFramework ? "framework" : "binary");
 +    return configured;
 +}
 +
@@ -160,7 +187,7 @@ index f79c16a..2b1af21 100644
  + (instancetype)sharedInstance {
      static LibretroCore *instance = nil;
      static dispatch_once_t onceToken;
-@@ -227,7 +262,9 @@ static BOOL ManicRoomExperiment(void) {
+@@ -227,7 +289,9 @@ static BOOL ManicRoomExperiment(void) {
          }
      }
      self.isRunning = YES;
@@ -170,7 +197,7 @@ index f79c16a..2b1af21 100644
      cheevos_event_register_callback(cheevosDidTrigger);
      netplay_event_register_callback(netplayDidTrigger);
      shutdown_register_callback(shutdownCallback);
-@@ -271,6 +308,7 @@ static BOOL ManicRoomExperiment(void) {
+@@ -271,6 +335,7 @@ static BOOL ManicRoomExperiment(void) {
      [self registerAzaharKeyboard:nil];
      [self registerEKA2L1InputDialog:nil questionDialog:nil];
      [[self getRetroArch] stop];
@@ -178,7 +205,7 @@ index f79c16a..2b1af21 100644
  }
  
  - (void)mute:(BOOL)mute {
-@@ -356,7 +394,10 @@ static BOOL ManicRoomExperiment(void) {
+@@ -356,7 +421,10 @@ static BOOL ManicRoomExperiment(void) {
      if (!LibretroPathLooksLikeEKA2L1(corePath)) {
          LibretroEKA2L1ShutdownManagement();
      }
@@ -190,7 +217,7 @@ index f79c16a..2b1af21 100644
  }
  
  - (void)loadCoreWithoutContent:(NSString *_Nonnull)corePath {
-@@ -1065,6 +1106,16 @@ static void libretroLogCallback(enum retro_log_level level, const char *fmt, va_
+@@ -1065,6 +1133,16 @@ static void libretroLogCallback(enum retro_log_level level, const char *fmt, va_
      vsnprintf(buffer, sizeof(buffer), fmt, args);
      NSString *logMessage = [NSString stringWithUTF8String:buffer] ?: @"";
      

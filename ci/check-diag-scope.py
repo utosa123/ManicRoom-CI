@@ -21,8 +21,12 @@ bridge=(root/'changes/Libretro/ui/drivers/LibretroCore.m').read_text(encoding='u
 frontend=(root/'changes/Libretro/runloop.c').read_text(encoding='utf8')
 assert all(x in bridge for x in ('manic_room_experimental_azahar_save_dir',
                                  'if (!ManicRoomExperiment()) return NULL',
-                                 '"azahar.libretro"',
-                                 'strcmp(configured, expected.UTF8String) != 0'))
+                                 'pathForResource:@"azahar.libretro"',
+                                 'ofType:@"framework"',
+                                 'strcmp(core, framework.fileSystemRepresentation) == 0',
+                                 'strcmp(core, binary.fileSystemRepresentation) == 0',
+                                 'strcmp(configured, expected.fileSystemRepresentation) != 0',
+                                 'frontend SAVE_DIRECTORY isolation accepted corePath='))
 assert all(x in frontend for x in ('case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:',
                                    'manic_room_experimental_azahar_save_dir()',
                                    'frontend SAVE_DIRECTORY=C Documents/RoomExperiment-v1'))

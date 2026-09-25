@@ -1,0 +1,261 @@
+diff --git a/src/core/hle/kernel/kernel.cpp b/src/core/hle/kernel/kernel.cpp
+index 5c9e5b6a..d365c094 100644
+--- a/src/core/hle/kernel/kernel.cpp
++++ b/src/core/hle/kernel/kernel.cpp
+@@ -171,6 +171,66 @@ void KernelSystem::ResetThreadIDs() {
+     next_thread_id = 0;
+ }
+ 
++void KernelSystem::RegisterYW2UDSWorkerOrderingWorkaround(const std::shared_ptr<Thread>& thread,
++                                                           u16 command_id) {
++    if (!thread || (command_id != 0x001D && command_id != 0x001E)) {
++        return;
++    }
++
++    const auto process = thread->owner_process.lock();
++    if (!process || !process->codeset || !IsYoKaiWatch2Title(process->codeset->program_id)) {
++        return;
++    }
++
++    std::scoped_lock lock(yw2_uds_worker_ordering_mutex);
++    auto& state = command_id == 0x001D ? yw2_host_worker_ordering : yw2_client_worker_ordering;
++    state = {process, thread, command_id, false};
++}
++
++u16 KernelSystem::TryUseYW2UDSWorkerOrderingWorkaround(
++    const std::shared_ptr<Process>& process, const std::shared_ptr<Thread>& thread) {
++    if (!process || !thread) {
++        return 0;
++    }
++
++    std::scoped_lock lock(yw2_uds_worker_ordering_mutex);
++    const auto try_state = [&](YW2UDSWorkerOrderingState& state) -> u16 {
++        const auto registered_process = state.process.lock();
++        const auto registered_thread = state.thread.lock();
++        if (!registered_process || !registered_thread) {
++            state = {};
++            return 0;
++        }
++        if (state.first_poll_consumed || registered_process != process ||
++            registered_thread != thread) {
++            return 0;
++        }
++        if (state.command_id != 0x001D && state.command_id != 0x001E) {
++            state = {};
++            return 0;
++        }
++
++        state.first_poll_consumed = true;
++        return state.command_id;
++    };
++
++    if (const u16 command_id = try_state(yw2_host_worker_ordering); command_id != 0) {
++        return command_id;
++    }
++    return try_state(yw2_client_worker_ordering);
++}
++
++void KernelSystem::ClearYW2UDSWorkerOrderingWorkaround(
++    const std::shared_ptr<Process>& process) {
++    std::scoped_lock lock(yw2_uds_worker_ordering_mutex);
++    if (yw2_host_worker_ordering.process.lock() == process) {
++        yw2_host_worker_ordering = {};
++    }
++    if (yw2_client_worker_ordering.process.lock() == process) {
++        yw2_client_worker_ordering = {};
++    }
++}
++
+ void KernelSystem::UpdateCPUAndMemoryState(u64 title_id, MemoryMode memory_mode,
+                                            New3dsHwCapabilities n3ds_hw_cap) {
+     if (Settings::values.is_new_3ds) {
+diff --git a/src/core/hle/kernel/kernel.h b/src/core/hle/kernel/kernel.h
+index 4637d1de..c9d60819 100644
+--- a/src/core/hle/kernel/kernel.h
++++ b/src/core/hle/kernel/kernel.h
+@@ -46,6 +46,31 @@ class Recorder;
+ 
+ namespace Kernel {
+ 
++constexpr bool IsYoKaiWatch2Title(u64 title_id) {
++    switch (title_id) {
++    // Japanese retail releases (runtime verified).
++    case 0x0004000000155100: // Shinuchi
++    case 0x000400000012F900: // Ganso
++    case 0x000400000012F800: // Honke
++    // International retail releases (experimental).
++    case 0x000400000019A900: // North America: Bony Spirits
++    case 0x000400000019AA00: // North America: Fleshy Souls
++    case 0x00040000001B2700: // North America: Psychic Specters
++    case 0x000400000019AB00: // Europe: Bony Spirits
++    case 0x000400000019AC00: // Europe: Fleshy Souls
++    case 0x00040000001B2900: // Europe: Psychic Specters
++    case 0x000400000019B000: // Australia: Bony Spirits
++    case 0x000400000019B100: // Australia: Fleshy Souls
++    case 0x00040000001B2800: // Australia: Psychic Specters
++    case 0x000400000019AE00: // Korea: Bony Spirits (Wonjo)
++    case 0x000400000019AF00: // Korea: Fleshy Souls (Bonga)
++    case 0x00040000001B2A00: // Korea: Psychic Specters (Kkeutpanwang)
++        return true;
++    default:
++        return false;
++    }
++}
++
+ class AddressArbiter;
+ class Event;
+ class Mutex;
+@@ -312,6 +337,11 @@ public:
+     /// Retrieves a thread from the current list of threads.
+     std::shared_ptr<Thread> GetThreadByID(u32 thread_id) const;
+ 
++    void RegisterYW2UDSWorkerOrderingWorkaround(const std::shared_ptr<Thread>& thread,
++                                                 u16 command_id);
++    u16 TryUseYW2UDSWorkerOrderingWorkaround(const std::shared_ptr<Process>& process,
++                                              const std::shared_ptr<Thread>& thread);
++
+     std::span<const std::shared_ptr<Process>> GetProcessList() const {
+         return process_list;
+     }
+@@ -420,6 +450,15 @@ public:
+     void UpdateCore1AppCpuLimit();
+ 
+ private:
++    struct YW2UDSWorkerOrderingState {
++        std::weak_ptr<Process> process;
++        std::weak_ptr<Thread> thread;
++        u16 command_id{};
++        bool first_poll_consumed{};
++    };
++
++    void ClearYW2UDSWorkerOrderingWorkaround(const std::shared_ptr<Process>& process);
++
+     void MemoryInit(MemoryMode memory_mode, u64 override_init_time);
+ 
+     void UpdateReportedMemory(MemoryMode memory_mode, New3dsMemoryMode n3ds_mode);
+@@ -432,6 +471,10 @@ private:
+ 
+     std::atomic<int> pending_async_operations{};
+ 
++    std::mutex yw2_uds_worker_ordering_mutex;
++    YW2UDSWorkerOrderingState yw2_host_worker_ordering;
++    YW2UDSWorkerOrderingState yw2_client_worker_ordering;
++
+     // Note: keep the member order below in order to perform correct destruction.
+     // Thread manager is destructed before process list in order to Stop threads and clear thread
+     // info from their parent processes first. Timer manager is destructed after process list
+diff --git a/src/core/hle/kernel/process.cpp b/src/core/hle/kernel/process.cpp
+index 5835ec28..f6cf5e2d 100644
+--- a/src/core/hle/kernel/process.cpp
++++ b/src/core/hle/kernel/process.cpp
+@@ -120,6 +120,7 @@ void KernelSystem::TerminateProcess(std::shared_ptr<Process> process) {
+     LOG_INFO(Kernel_SVC, "Process {} exiting", process->process_id);
+ 
+     ASSERT_MSG(process->status == ProcessStatus::Running, "Process has already exited");
++    ClearYW2UDSWorkerOrderingWorkaround(process);
+     process->status = ProcessStatus::Exited;
+ 
+     // Stop all process threads.
+diff --git a/src/core/hle/kernel/svc.cpp b/src/core/hle/kernel/svc.cpp
+index 0862a8eb..5d05b140 100644
+--- a/src/core/hle/kernel/svc.cpp
++++ b/src/core/hle/kernel/svc.cpp
+@@ -805,7 +805,34 @@ Result SVC::WaitSynchronization1(Handle handle, s64 nano_seconds) {
+     LOG_TRACE(Kernel_SVC, "called handle=0x{:08X}({}:{}), nanoseconds={}", handle,
+               object->GetTypeName(), object->GetName(), nano_seconds);
+ 
+-    if (object->ShouldWait(thread)) {
++    const bool actual_should_wait = object->ShouldWait(thread);
++    bool apply_yw2_worker_ordering_workaround = false;
++    if (!actual_should_wait && nano_seconds == 0 &&
++        object->GetHandleType() == HandleType::Thread) {
++        const auto process = kernel.GetCurrentProcess();
++        if (process && process->codeset && IsYoKaiWatch2Title(process->codeset->program_id)) {
++            const auto target_thread = std::static_pointer_cast<Thread>(object);
++            const auto target_process = target_thread->owner_process.lock();
++            if (target_process == process && target_thread->status == ThreadStatus::Dead) {
++                const u16 command_id =
++                    kernel.TryUseYW2UDSWorkerOrderingWorkaround(process, target_thread);
++                apply_yw2_worker_ordering_workaround = command_id != 0;
++                if (command_id != 0) {
++                    LOG_DEBUG(Service_NWM,
++                              "YW2 worker polling workaround: title_id=0x{:016X} process_id={} "
++                              "role={} command_id=0x{:04X} worker_thread_id={} timeout=0 "
++                              "worker_status=Dead first_poll_consumed=true matched=true",
++                              process->codeset->program_id, process->process_id,
++                              command_id == 0x001D ? "host" : "client", command_id,
++                              target_thread->GetThreadId());
++                }
++            }
++        }
++    }
++
++    const bool effective_should_wait =
++        actual_should_wait || apply_yw2_worker_ordering_workaround;
++    if (effective_should_wait) {
+         R_UNLESS(nano_seconds != 0, ResultTimeout);
+ 
+         thread->wait_objects = {object};
+diff --git a/src/core/hle/service/nwm/nwm_uds.cpp b/src/core/hle/service/nwm/nwm_uds.cpp
+index 0f7e9c97..697eecf5 100644
+--- a/src/core/hle/service/nwm/nwm_uds.cpp
++++ b/src/core/hle/service/nwm/nwm_uds.cpp
+@@ -999,6 +999,7 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
+ }
+ 
+ void NWM_UDS::BeginHostingNetwork(Kernel::HLERequestContext& ctx) {
++    system.Kernel().RegisterYW2UDSWorkerOrderingWorkaround(ctx.ClientThread(), 0x001D);
+     IPC::RequestParser rp(ctx);
+ 
+     const u32 passphrase_size = rp.Pop<u32>();
+@@ -1359,6 +1360,21 @@ void NWM_UDS::GetChannel(Kernel::HLERequestContext& ctx) {
+     LOG_DEBUG(Service_NWM, "called");
+ }
+ 
++void NWM_UDS::SetProbeResponseParam(Kernel::HLERequestContext& ctx) {
++    IPC::RequestParser rp(ctx);
++
++    const u32 oui_and_type = rp.Pop<u32>();
++    const u32 data_word = rp.Pop<u32>();
++    const s8 data = static_cast<s8>(data_word & 0xFF);
++
++    LOG_INFO(Service_NWM,
++             "SetProbeResponseParam: oui_and_type=0x{:08X}, data_word=0x{:08X}, data={}",
++             oui_and_type, data_word, static_cast<int>(data));
++
++    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
++    rb.Push(ResultSuccess);
++}
++
+ class NWM_UDS::ThreadCallback : public Kernel::HLERequestContext::WakeupCallback {
+ public:
+     explicit ThreadCallback(u16 command_id_) : command_id(command_id_) {}
+@@ -1413,6 +1429,7 @@ void NWM_UDS::ConnectToNetwork(Kernel::HLERequestContext& ctx, u16 command_id,
+ }
+ 
+ void NWM_UDS::ConnectToNetwork(Kernel::HLERequestContext& ctx) {
++    system.Kernel().RegisterYW2UDSWorkerOrderingWorkaround(ctx.ClientThread(), 0x001E);
+     IPC::RequestParser rp(ctx);
+ 
+     const auto connection_type = rp.Pop<u8>();
+@@ -1690,7 +1707,7 @@ NWM_UDS::NWM_UDS(Core::System& system) : ServiceFramework("nwm::UDS"), system(sy
+         {0x001E, &NWM_UDS::ConnectToNetwork, "ConnectToNetwork"},
+         {0x001F, &NWM_UDS::DecryptBeaconData, "DecryptBeaconData"},
+         {0x0020, nullptr, "Flush"},
+-        {0x0021, nullptr, "SetProbeResponseParam"},
++        {0x0021, &NWM_UDS::SetProbeResponseParam, "SetProbeResponseParam"},
+         {0x0022, nullptr, "ScanOnConnection"},
+         // clang-format on
+     };
+diff --git a/src/core/hle/service/nwm/nwm_uds.h b/src/core/hle/service/nwm/nwm_uds.h
+index 560c3858..30099e05 100644
+--- a/src/core/hle/service/nwm/nwm_uds.h
++++ b/src/core/hle/service/nwm/nwm_uds.h
+@@ -348,6 +348,7 @@ private:
+      *      2 : Channel of the current WiFi network connection.
+      */
+     void GetChannel(Kernel::HLERequestContext& ctx);
++    void SetProbeResponseParam(Kernel::HLERequestContext& ctx);
+ 
+     /**
+      * NWM_UDS::Initialize service function

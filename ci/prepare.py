@@ -39,7 +39,7 @@ if MODE in ('windows','core'):
     dst=clone('https://github.com/Daiuno/azahar.git','03da4a354cc10012418c28a935dd0c627e37a963','azahar')
     deps=['externals/enet','externals/fmt','externals/boost','externals/libretro-common/libretro-common']
     run(['git','submodule','update','--init','--recursive',*(deps if MODE=='windows' else [])],dst)
-    patch(dst,'azahar-experimental'); patch(dst,'CIA-core'); patch(dst,'Diag-core'); inventory(dst,'azahar')
+    patch(dst,'azahar-experimental'); patch(dst,'YW2-local-play'); patch(dst,'CIA-core'); patch(dst,'Diag-core'); inventory(dst,'azahar')
 else:
     dst=clone('https://github.com/Manic-EMU/ManicEMU.git','fbaeab79c214d5920bb51afa6f2d786fb2b12a58','ManicEMU')
     run(['git','submodule','update','--init','--recursive'],dst)

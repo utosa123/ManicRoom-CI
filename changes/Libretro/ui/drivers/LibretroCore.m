@@ -190,6 +190,23 @@ void manic_room_diag(const char *format, ...) {
     NSLog(@"[ROOM-C-DIAG] %s", buffer);
 }
 
+// The experimental Azahar core must see the same isolated root supplied at
+// frontend startup, even when a saved RetroArch savefile_directory overrides it.
+// The returned pointer belongs to configuration.c's stable copied buffer.
+const char *manic_room_experimental_azahar_save_dir(void) {
+    if (!ManicRoomExperiment()) return NULL;
+    const char *core = path_get(RARCH_PATH_CORE);
+    if (!core) return NULL;
+    const char *last_slash = strrchr(core, '/');
+    if (strcmp(last_slash ? last_slash + 1 : core, "azahar.libretro") != 0) return NULL;
+    const char *configured = get_custom_save_dir();
+    if (!configured) return NULL;
+    NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    NSString *expected = [documents stringByAppendingPathComponent:@"RoomExperiment-v1"];
+    if (!documents || strcmp(configured, expected.UTF8String) != 0) return NULL;
+    return configured;
+}
+
 @implementation LibretroCore
 
 - (void)setRoomCDiagnostics:(BOOL)enable {

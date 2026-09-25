@@ -250,6 +250,7 @@
 
 #if defined(HAVE_COCOATOUCH)
 extern void manic_room_diag(const char *format, ...);
+extern const char *manic_room_experimental_azahar_save_dir(void);
 #define ROOM_C_DIAG(...) manic_room_diag(__VA_ARGS__)
 #else
 #define ROOM_C_DIAG(...) ((void)0)
@@ -2124,6 +2125,17 @@ bool runloop_environment_cb(unsigned cmd, void *data)
          break;
 
       case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:
+#if defined(HAVE_COCOATOUCH)
+         {
+            const char *isolated = manic_room_experimental_azahar_save_dir();
+            if (isolated)
+            {
+               *(const char**)data = isolated;
+               ROOM_C_DIAG("frontend SAVE_DIRECTORY=C Documents/RoomExperiment-v1 (isolated)");
+               break;
+            }
+         }
+#endif
          *(const char**)data = runloop_st->savefile_dir;
          RARCH_LOG("[Environ]: SAVE_DIRECTORY: \"%s\".\n",
                runloop_st->savefile_dir);

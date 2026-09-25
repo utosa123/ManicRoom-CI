@@ -17,6 +17,15 @@ assert all(x in storage for x in ('ParseStorageOptions GetSaveDir=',
                                   'ParseStorageOptions SetUserPath RETURN UserDir='))
 diag=(root/'changes/azahar-experimental/src/citra_libretro/room_c_diag.h').read_text(encoding='utf8')
 assert 'os_log_with_type' in diag and 'StoragePathForLog' in diag and '[path]' in diag
+bridge=(root/'changes/Libretro/ui/drivers/LibretroCore.m').read_text(encoding='utf8')
+frontend=(root/'changes/Libretro/runloop.c').read_text(encoding='utf8')
+assert all(x in bridge for x in ('manic_room_experimental_azahar_save_dir',
+                                 'if (!ManicRoomExperiment()) return NULL',
+                                 '"azahar.libretro"',
+                                 'strcmp(configured, expected.UTF8String) != 0'))
+assert all(x in frontend for x in ('case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:',
+                                   'manic_room_experimental_azahar_save_dir()',
+                                   'frontend SAVE_DIRECTORY=C Documents/RoomExperiment-v1'))
 out=root/'logs';out.mkdir(exist_ok=True)
 (out/'diag-scope.json').write_text(json.dumps({'protected_files':len(expected['sha256_lf']),'baseline':expected['baseline'],'result':'pass','device_tested':False},indent=2))
 print('PASS diagnostic markers and unchanged Room/CIA/adapter/gate source hashes')

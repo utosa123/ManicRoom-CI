@@ -1,100 +1,14 @@
---- a/ui/drivers/cocoa/LibretroCore.h
-+++ b/ui/drivers/cocoa/LibretroCore.h
-@@ -197,6 +197,8 @@
- - (void)setFastforwardFrameSkip:(BOOL)frameSkip;
- - (void)set3DSCustomLayout:(NSString *_Nullable)layout;
- - (void)setLibretroLogMonitor:(BOOL)enable;
-+/// Temporary C-only diagnostic routing; does not enable JIT or change core settings.
-+- (void)setRoomCDiagnostics:(BOOL)enable;
- - (void)loadAmiibo:(NSString *_Nonnull)path;
- - (BOOL)isSearchingAmiibo;
- - (void)registerAzaharKeyboard:(void(^ _Nullable)(AzaharKeyboardConfig *_Nonnull config))callback;
---- a/ui/drivers/LibretroCore.m
-+++ b/ui/drivers/LibretroCore.m
-@@ -1,3 +1,4 @@
-+#include <stdatomic.h>
- //
- //  LibretroCore.m
- //  LibretroCore
-@@ -181,7 +182,23 @@
-     return [[[NSBundle mainBundle] objectForInfoDictionaryKey:@"ManicRoomBuildMode"] isEqual:@"experimental"];
- }
- 
-+static atomic_bool roomCDiagnosticActive = false;
-+void manic_room_diag(const char *format, ...) {
-+    if (!atomic_load(&roomCDiagnosticActive)) return;
-+    va_list args; va_start(args, format);
-+    char buffer[2048]; vsnprintf(buffer, sizeof(buffer), format, args); va_end(args);
-+    NSLog(@"[ROOM-C-DIAG] %s", buffer);
-+}
-+
- @implementation LibretroCore
-+
-+- (void)setRoomCDiagnostics:(BOOL)enable {
-+    atomic_store(&roomCDiagnosticActive, enable && ManicRoomExperiment());
-+    if (atomic_load(&roomCDiagnosticActive)) {
-+        log_register_callback(libretroLogCallback);
-+        manic_room_diag("Libretro bridge diagnostics enabled");
-+    }
-+}
- 
- + (instancetype)sharedInstance {
-     static LibretroCore *instance = nil;
-@@ -227,7 +244,9 @@
-         }
-     }
-     self.isRunning = YES;
-+    manic_room_diag("Libretro frontend start ENTER");
-     [[self getRetroArch] startWithCustomSaveDir:customSaveDir];
-+    manic_room_diag("Libretro frontend start RETURN");
-     cheevos_event_register_callback(cheevosDidTrigger);
-     netplay_event_register_callback(netplayDidTrigger);
-     shutdown_register_callback(shutdownCallback);
-@@ -271,6 +290,7 @@
-     [self registerAzaharKeyboard:nil];
-     [self registerEKA2L1InputDialog:nil questionDialog:nil];
-     [[self getRetroArch] stop];
-+    atomic_store(&roomCDiagnosticActive, false);
- }
- 
- - (void)mute:(BOOL)mute {
-@@ -356,7 +376,10 @@
-     if (!LibretroPathLooksLikeEKA2L1(corePath)) {
-         LibretroEKA2L1ShutdownManagement();
-     }
--    return [[self getRetroArch] loadGame:gamePath corePath:corePath completion:completion];
-+    manic_room_diag("bridge loadGame ENTER core=%s ROM=%s", corePath.lastPathComponent.UTF8String, gamePath.lastPathComponent.UTF8String);
-+    BOOL loaded = [[self getRetroArch] loadGame:gamePath corePath:corePath completion:completion];
-+    manic_room_diag("bridge loadGame RETURN result=%d", loaded);
-+    return loaded;
- }
- 
- - (void)loadCoreWithoutContent:(NSString *_Nonnull)corePath {
-@@ -1065,6 +1088,16 @@
-     vsnprintf(buffer, sizeof(buffer), fmt, args);
-     NSString *logMessage = [NSString stringWithUTF8String:buffer] ?: @"";
-     
-+    if (atomic_load(&roomCDiagnosticActive)) {
-+        // Forward all received levels. Redact paths from upstream messages and prefix each line.
-+        static NSRegularExpression *paths;
-+        static dispatch_once_t once;
-+        dispatch_once(&once, ^{ paths = [NSRegularExpression regularExpressionWithPattern:@"(?:file://)?/[^\\s\"'<>]+" options:0 error:nil]; });
-+        NSString *safe = [paths stringByReplacingMatchesInString:logMessage options:0 range:NSMakeRange(0, logMessage.length) withTemplate:@"[path]"];
-+        for (NSString *line in [safe componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
-+            if (line.length) NSLog(@"[ROOM-C-DIAG] libretro level=%d %@", (int)level, line);
-+        }
-+    }
-     if (!g_enableMonitorLibretroLog) {
-         return;
-     }
+diff --git a/runloop.c b/runloop.c
+index 717fbaa..b6aeb8f 100644
 --- a/runloop.c
 +++ b/runloop.c
-@@ -248,6 +248,13 @@
+@@ -248,6 +248,14 @@
  #include "ai/game_ai.h"
  #endif
  
 +#if defined(HAVE_COCOATOUCH)
 +extern void manic_room_diag(const char *format, ...);
++extern const char *manic_room_experimental_azahar_save_dir(void);
 +#define ROOM_C_DIAG(...) manic_room_diag(__VA_ARGS__)
 +#else
 +#define ROOM_C_DIAG(...) ((void)0)
@@ -103,7 +17,7 @@
  #define SHADER_FILE_WATCH_DELAY_MSEC 500
  
  #define QUIT_DELAY_USEC 3 * 1000000 /* 3 seconds */
-@@ -265,6 +272,7 @@
+@@ -265,6 +273,7 @@
  #define SYMBOL(x) do { \
     function_t func = dylib_proc(lib_handle_local, #x); \
     memcpy(&current_core->x, &func, sizeof(func)); \
@@ -111,7 +25,25 @@
     if (!current_core->x) { RARCH_ERR("Failed to load symbol: \"%s\"\n", #x); retroarch_fail(1, "runloop_init_libretro_symbols()"); } \
  } while (0)
  #else
-@@ -3831,18 +3839,21 @@
+@@ -2116,6 +2125,17 @@ bool runloop_environment_cb(unsigned cmd, void *data)
+          break;
+ 
+       case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:
++#if defined(HAVE_COCOATOUCH)
++         {
++            const char *isolated = manic_room_experimental_azahar_save_dir();
++            if (isolated)
++            {
++               *(const char**)data = isolated;
++               ROOM_C_DIAG("frontend SAVE_DIRECTORY=C Documents/RoomExperiment-v1 (isolated)");
++               break;
++            }
++         }
++#endif
+          *(const char**)data = runloop_st->savefile_dir;
+          RARCH_LOG("[Environ]: SAVE_DIRECTORY: \"%s\".\n",
+                runloop_st->savefile_dir);
+@@ -3831,18 +3851,21 @@ bool runloop_init_libretro_symbols(
                 RARCH_LOG("[Core]: Loading dynamic libretro core from: \"%s\"\n",
                       path);
  
@@ -133,7 +65,7 @@
                 lib_handle_local = runloop_st->lib_handle;
              }
  #ifdef HAVE_RUNAHEAD
-@@ -3860,7 +3871,9 @@
+@@ -3860,7 +3883,9 @@ bool runloop_init_libretro_symbols(
  #endif
  #endif
  
@@ -143,7 +75,7 @@
           }
           break;
        case CORE_TYPE_DUMMY:
-@@ -4903,7 +4916,9 @@
+@@ -4903,7 +4928,9 @@ bool runloop_event_init_core(
  
     video_st->frame_cache_data              = NULL;
  
@@ -153,7 +85,7 @@
     runloop_st->current_core.flags         |= RETRO_CORE_FLAG_INITED;
  
     /* Attempt to set initial disk index */
-@@ -7820,6 +7835,7 @@
+@@ -7820,6 +7847,7 @@ bool core_load_game(retro_ctx_load_content_info_t *load_info)
  
     set_save_state_in_background(false);
  
@@ -161,7 +93,7 @@
     if (load_info && load_info->special)
        game_loaded = runloop_st->current_core.retro_load_game_special(
              load_info->special->id, load_info->info, load_info->content->size);
-@@ -7828,6 +7844,7 @@
+@@ -7828,6 +7856,7 @@ bool core_load_game(retro_ctx_load_content_info_t *load_info)
     else if (content_get_flags() & CONTENT_ST_FLAG_CORE_DOES_NOT_NEED_CONTENT)
        game_loaded = runloop_st->current_core.retro_load_game(NULL);
  
@@ -169,3 +101,114 @@
     if (game_loaded)
     {
        /* If 'game_loaded' is true at this point, then
+diff --git a/ui/drivers/LibretroCore.m b/ui/drivers/LibretroCore.m
+index f79c16a..ec65cda 100644
+--- a/ui/drivers/LibretroCore.m
++++ b/ui/drivers/LibretroCore.m
+@@ -1,3 +1,4 @@
++#include <stdatomic.h>
+ //
+ //  LibretroCore.m
+ //  LibretroCore
+@@ -181,8 +182,41 @@ static BOOL ManicRoomExperiment(void) {
+     return [[[NSBundle mainBundle] objectForInfoDictionaryKey:@"ManicRoomBuildMode"] isEqual:@"experimental"];
+ }
+ 
++static atomic_bool roomCDiagnosticActive = false;
++void manic_room_diag(const char *format, ...) {
++    if (!atomic_load(&roomCDiagnosticActive)) return;
++    va_list args; va_start(args, format);
++    char buffer[2048]; vsnprintf(buffer, sizeof(buffer), format, args); va_end(args);
++    NSLog(@"[ROOM-C-DIAG] %s", buffer);
++}
++
++// The experimental Azahar core must see the same isolated root supplied at
++// frontend startup, even when a saved RetroArch savefile_directory overrides it.
++// The returned pointer belongs to configuration.c's stable copied buffer.
++const char *manic_room_experimental_azahar_save_dir(void) {
++    if (!ManicRoomExperiment()) return NULL;
++    const char *core = path_get(RARCH_PATH_CORE);
++    if (!core) return NULL;
++    const char *last_slash = strrchr(core, '/');
++    if (strcmp(last_slash ? last_slash + 1 : core, "azahar.libretro") != 0) return NULL;
++    const char *configured = get_custom_save_dir();
++    if (!configured) return NULL;
++    NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
++    NSString *expected = [documents stringByAppendingPathComponent:@"RoomExperiment-v1"];
++    if (!documents || strcmp(configured, expected.UTF8String) != 0) return NULL;
++    return configured;
++}
++
+ @implementation LibretroCore
+ 
++- (void)setRoomCDiagnostics:(BOOL)enable {
++    atomic_store(&roomCDiagnosticActive, enable && ManicRoomExperiment());
++    if (atomic_load(&roomCDiagnosticActive)) {
++        log_register_callback(libretroLogCallback);
++        manic_room_diag("Libretro bridge diagnostics enabled");
++    }
++}
++
+ + (instancetype)sharedInstance {
+     static LibretroCore *instance = nil;
+     static dispatch_once_t onceToken;
+@@ -227,7 +261,9 @@ static BOOL ManicRoomExperiment(void) {
+         }
+     }
+     self.isRunning = YES;
++    manic_room_diag("Libretro frontend start ENTER");
+     [[self getRetroArch] startWithCustomSaveDir:customSaveDir];
++    manic_room_diag("Libretro frontend start RETURN");
+     cheevos_event_register_callback(cheevosDidTrigger);
+     netplay_event_register_callback(netplayDidTrigger);
+     shutdown_register_callback(shutdownCallback);
+@@ -271,6 +307,7 @@ static BOOL ManicRoomExperiment(void) {
+     [self registerAzaharKeyboard:nil];
+     [self registerEKA2L1InputDialog:nil questionDialog:nil];
+     [[self getRetroArch] stop];
++    atomic_store(&roomCDiagnosticActive, false);
+ }
+ 
+ - (void)mute:(BOOL)mute {
+@@ -356,7 +393,10 @@ static BOOL ManicRoomExperiment(void) {
+     if (!LibretroPathLooksLikeEKA2L1(corePath)) {
+         LibretroEKA2L1ShutdownManagement();
+     }
+-    return [[self getRetroArch] loadGame:gamePath corePath:corePath completion:completion];
++    manic_room_diag("bridge loadGame ENTER core=%s ROM=%s", corePath.lastPathComponent.UTF8String, gamePath.lastPathComponent.UTF8String);
++    BOOL loaded = [[self getRetroArch] loadGame:gamePath corePath:corePath completion:completion];
++    manic_room_diag("bridge loadGame RETURN result=%d", loaded);
++    return loaded;
+ }
+ 
+ - (void)loadCoreWithoutContent:(NSString *_Nonnull)corePath {
+@@ -1065,6 +1105,16 @@ static void libretroLogCallback(enum retro_log_level level, const char *fmt, va_
+     vsnprintf(buffer, sizeof(buffer), fmt, args);
+     NSString *logMessage = [NSString stringWithUTF8String:buffer] ?: @"";
+     
++    if (atomic_load(&roomCDiagnosticActive)) {
++        // Forward all received levels. Redact paths from upstream messages and prefix each line.
++        static NSRegularExpression *paths;
++        static dispatch_once_t once;
++        dispatch_once(&once, ^{ paths = [NSRegularExpression regularExpressionWithPattern:@"(?:file://)?/[^\\s\"'<>]+" options:0 error:nil]; });
++        NSString *safe = [paths stringByReplacingMatchesInString:logMessage options:0 range:NSMakeRange(0, logMessage.length) withTemplate:@"[path]"];
++        for (NSString *line in [safe componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
++            if (line.length) NSLog(@"[ROOM-C-DIAG] libretro level=%d %@", (int)level, line);
++        }
++    }
+     if (!g_enableMonitorLibretroLog) {
+         return;
+     }
+diff --git a/ui/drivers/cocoa/LibretroCore.h b/ui/drivers/cocoa/LibretroCore.h
+index b94b8c8..f03c563 100644
+--- a/ui/drivers/cocoa/LibretroCore.h
++++ b/ui/drivers/cocoa/LibretroCore.h
+@@ -197,6 +197,8 @@ typedef NS_ENUM(NSInteger, LibretroNetplayEvent) {
+ - (void)setFastforwardFrameSkip:(BOOL)frameSkip;
+ - (void)set3DSCustomLayout:(NSString *_Nullable)layout;
+ - (void)setLibretroLogMonitor:(BOOL)enable;
++/// Temporary C-only diagnostic routing; does not enable JIT or change core settings.
++- (void)setRoomCDiagnostics:(BOOL)enable;
+ - (void)loadAmiibo:(NSString *_Nonnull)path;
+ - (BOOL)isSearchingAmiibo;
+ - (void)registerAzaharKeyboard:(void(^ _Nullable)(AzaharKeyboardConfig *_Nonnull config))callback;

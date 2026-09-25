@@ -61,6 +61,8 @@ jobs:
         run: python3 ci/prepare.py core
       - name: Prepare changed Manic and protected original core
         run: python3 ci/prepare.py experimental
+      - name: Verify YW2 and Cheat source gates
+        run: python3 ci/check-yw2-cheat.py
       - name: 1 Compile candidate iOS arm64 dylib
         id: compile
         run: bash ci/compile-core-ios.sh src/azahar core-out
@@ -98,8 +100,8 @@ jobs:
         id: ipa
         run: |
           bash changes/ManicEMU/Scripts/Room/package-unsigned.sh app-out
-          mv app-out/ManicRoom-experimental-UNSIGNED.ipa app-out/ManicRoom-experimental-storage-diag2-UNSIGNED.ipa
-          shasum -a 256 app-out/ManicRoom-experimental-storage-diag2-UNSIGNED.ipa > app-out/IPA-SHA256SUMS
+          mv app-out/ManicRoom-experimental-UNSIGNED.ipa app-out/ManicRoom-experimental-YW2-cheat-UNSIGNED.ipa
+          shasum -a 256 app-out/ManicRoom-experimental-YW2-cheat-UNSIGNED.ipa > app-out/IPA-SHA256SUMS
       - name: Record separate outcomes even after a failure
         if: always()
         env:

@@ -1,0 +1,170 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 6d5929b..a546e62 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -18,7 +18,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/cmake-modul
+ include(DownloadExternals)
+ include(CMakeDependentOption)
+ 
+-option(MANIC_ROOM_EXPERIMENT "Isolated Manic Room experiment; no cheats or states" OFF)
++option(MANIC_ROOM_EXPERIMENT "Isolated Manic Room experiment; states disabled" OFF)
+ if(MANIC_ROOM_EXPERIMENT)
+     add_compile_definitions(MANIC_ROOM_EXPERIMENT=1)
+ endif()
+diff --git a/src/citra_libretro/citra_libretro.cpp b/src/citra_libretro/citra_libretro.cpp
+index fc235ee..1f7e2fd 100644
+--- a/src/citra_libretro/citra_libretro.cpp
++++ b/src/citra_libretro/citra_libretro.cpp
+@@ -4,8 +4,11 @@
+ 
+ #include "citra_libretro/room_c_diag.h"
+ #include "citra_libretro/room_session.h"
++#include "core/cheats/cheats.h"
++#include "core/cheats/gateway_cheat.h"
+ #include "common/file_util.h"
+ #include "core/hle/service/cfg/cfg.h"
++#include <algorithm>
+ #include <list>
+ #include <numeric>
+ #include <vector>
+@@ -704,6 +707,7 @@ bool retro_load_game(const struct retro_game_info* info) {
+ void retro_unload_game() {
+     LOG_DEBUG(Frontend, "Unloading game...");
+     LibRetro::RoomSession::GameStopped();
++    retro_cheat_reset();
+     retro_set_keyboard_callback(nullptr);
+     LibRetro::Camera::ShutdownCameraInterface();
+     Core::System::GetInstance().Shutdown();
+@@ -830,9 +834,29 @@ size_t retro_get_memory_size(unsigned id) {
+     return 0;
+ }
+ 
+-void retro_cheat_reset() {}
++void retro_cheat_reset() {
++#ifdef MANIC_ROOM_EXPERIMENT
++    if (LibRetro::RoomSession::Active()) return;
++    Core::System::GetInstance().CheatEngine().ResetLibretroCheats();
++#endif
++}
+ 
+-void retro_cheat_set(unsigned index, bool enabled, const char* code) {}
++void retro_cheat_set(unsigned index, bool enabled, const char* code) {
++#ifdef MANIC_ROOM_EXPERIMENT
++    if (LibRetro::RoomSession::Active()) return;
++    auto& engine = Core::System::GetInstance().CheatEngine();
++    if (!code || !*code) {
++        engine.SetLibretroCheat(index, nullptr);
++        return;
++    }
++    std::string gateway_code{code};
++    std::replace(gateway_code.begin(), gateway_code.end(), '+', '\n');
++    auto cheat = std::make_shared<Cheats::GatewayCheat>(
++        "libretro:" + std::to_string(index), std::move(gateway_code), "");
++    cheat->SetEnabled(enabled);
++    engine.SetLibretroCheat(index, std::move(cheat));
++#endif
++}
+ 
+ // Amiibo support functions - declared in same style as other retro_ functions
+ bool retro_load_amiibo(const char* path) {
+diff --git a/src/core/cheats/cheats.cpp b/src/core/cheats/cheats.cpp
+index e5bfca2..3e0d149 100644
+--- a/src/core/cheats/cheats.cpp
++++ b/src/core/cheats/cheats.cpp
+@@ -10,6 +10,9 @@
+ #include "core/cheats/gateway_cheat.h"
+ #include "core/core.h"
+ #include "core/core_timing.h"
++#ifdef MANIC_ROOM_EXPERIMENT
++#include "citra_libretro/room_session.h"
++#endif
+ 
+ namespace Cheats {
+ 
+@@ -61,6 +64,22 @@ void CheatEngine::UpdateCheat(std::size_t index, std::shared_ptr<CheatBase>&& ne
+     cheats_list[index] = std::move(new_cheat);
+ }
+ 
++#ifdef MANIC_ROOM_EXPERIMENT
++void CheatEngine::SetLibretroCheat(unsigned index, std::shared_ptr<CheatBase> cheat) {
++    std::unique_lock lock{cheats_list_mutex};
++    if (cheat) {
++        libretro_cheats.insert_or_assign(index, std::move(cheat));
++    } else {
++        libretro_cheats.erase(index);
++    }
++}
++
++void CheatEngine::ResetLibretroCheats() {
++    std::unique_lock lock{cheats_list_mutex};
++    libretro_cheats.clear();
++}
++#endif
++
+ void CheatEngine::SaveCheatFile(u64 title_id) const {
+     const std::string cheat_dir = FileUtil::GetUserPath(FileUtil::UserPath::CheatsDir);
+     const std::string filepath = fmt::format("{}{:016X}.txt", cheat_dir, title_id);
+@@ -104,10 +123,27 @@ void CheatEngine::LoadCheatFile(u64 title_id) {
+ }
+ 
+ void CheatEngine::RunCallback([[maybe_unused]] std::uintptr_t user_data, s64 cycles_late) {
++#ifdef MANIC_ROOM_EXPERIMENT
++    // Preserve the configured cheats while a Room join, session, or leave is active.
++    // The next callback after leaving resumes normal execution.
++    if (LibRetro::RoomSession::Active()) {
++        system.CoreTiming().ScheduleEvent(run_interval_ticks - cycles_late, event);
++        return;
++    }
++#endif
+     {
+         std::shared_lock lock{cheats_list_mutex};
+-#ifndef MANIC_ROOM_EXPERIMENT
+         for (const auto& cheat : cheats_list) {
++#ifdef MANIC_ROOM_EXPERIMENT
++            if (LibRetro::RoomSession::Active()) break;
++#endif
++            if (cheat->IsEnabled()) {
++                cheat->Execute(system, process_id);
++            }
++        }
++#ifdef MANIC_ROOM_EXPERIMENT
++        for (const auto& [index, cheat] : libretro_cheats) {
++            if (LibRetro::RoomSession::Active()) break;
+             if (cheat->IsEnabled()) {
+                 cheat->Execute(system, process_id);
+             }
+diff --git a/src/core/cheats/cheats.h b/src/core/cheats/cheats.h
+index c3a9e84..b6548bc 100644
+--- a/src/core/cheats/cheats.h
++++ b/src/core/cheats/cheats.h
+@@ -5,6 +5,7 @@
+ #pragma once
+ 
+ #include <memory>
++#include <map>
+ #include <optional>
+ #include <shared_mutex>
+ #include <span>
+@@ -44,6 +45,12 @@ public:
+     /// Updates a cheat at the specified index in the cheats list.
+     void UpdateCheat(std::size_t index, std::shared_ptr<CheatBase>&& new_cheat);
+ 
++#ifdef MANIC_ROOM_EXPERIMENT
++    // Libretro indexes are independent of cheats loaded from the isolated user directory.
++    void SetLibretroCheat(unsigned index, std::shared_ptr<CheatBase> cheat);
++    void ResetLibretroCheats();
++#endif
++
+     /// Loads the cheat file from disk for the specified title id.
+     void LoadCheatFile(u64 title_id);
+ 
+@@ -64,6 +71,9 @@ private:
+     std::optional<u64> loaded_title_id;
+     u32 process_id = 0xFFFFFFFF;
+     std::vector<std::shared_ptr<CheatBase>> cheats_list;
++#ifdef MANIC_ROOM_EXPERIMENT
++    std::map<unsigned, std::shared_ptr<CheatBase>> libretro_cheats;
++#endif
+     mutable std::shared_mutex cheats_list_mutex;
+ };
+ } // namespace Cheats

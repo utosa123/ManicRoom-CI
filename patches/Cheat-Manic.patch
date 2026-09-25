@@ -1,0 +1,107 @@
+diff --git a/ManicEmu/ManicEmu/Sources/Business/CheatCode/Views/CheatCodeListView.swift b/ManicEmu/ManicEmu/Sources/Business/CheatCode/Views/CheatCodeListView.swift
+index 7c59cbf..6fc92ec 100644
+--- a/ManicEmu/ManicEmu/Sources/Business/CheatCode/Views/CheatCodeListView.swift
++++ b/ManicEmu/ManicEmu/Sources/Business/CheatCode/Views/CheatCodeListView.swift
+@@ -12,6 +12,11 @@ import UniformTypeIdentifiers
+ 
+ class CheatCodeListView: BaseView {
+     private let game: Game
++    private var roomCheatsLocked: Bool {
++        game.isAzahar3DS &&
++            (Bundle.main.object(forInfoDictionaryKey: "ManicRoomBuildMode") as? String) == "experimental" &&
++            LibretroCore.sharedInstance().azaharRoomActive()
++    }
+     private let isFBNeoGame: Bool
+     private let gameCheats: Results<GameCheat>?
+     private var fbNeoCheats = [GameCheat]()
+@@ -151,6 +156,11 @@ class CheatCodeListView: BaseView {
+     }
+     
+     private func handleAction(_ action: ASListPage.Action) {
++        if roomCheatsLocked {
++            if action.navigationValue?.isTapClose == true, showAsSheet { hide() }
++            updateContents()
++            return
++        }
+         if let navigationValue = action.navigationValue {
+             //navigation action
+             if navigationValue.isTapClose {
+@@ -423,7 +433,9 @@ class CheatCodeListView: BaseView {
+     }
+     
+     private func setCheats(_ cheats: [GameCheat], activate: Bool, notifying: Bool = true) {
++        guard !roomCheatsLocked else { updateContents(); return }
+         func updateGameCheat() {
++            guard !roomCheatsLocked else { updateContents(); return }
+             if notifying {
+                 Game.change { realm in
+                     cheats.forEach({
+diff --git a/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift b/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift
+index a79ce58..a54caf4 100644
+--- a/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift
++++ b/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift
+@@ -1311,7 +1311,10 @@ enum GameOption: Int, CaseIterable {
+             allOptions.remove(.azaharRoom)
+         }
+         if (Bundle.main.object(forInfoDictionaryKey: "ManicRoomBuildMode") as? String) == "experimental" {
+-            allOptions.subtract([.saveState, .quickLoadState, .stateList, .fastForward, .rewind, .slowMotion, .cheatCode])
++            allOptions.subtract([.saveState, .quickLoadState, .stateList, .fastForward, .rewind, .slowMotion])
++            if !game.isAzahar3DS || LibretroCore.sharedInstance().azaharRoomActive() {
++                allOptions.remove(.cheatCode)
++            }
+         }
+         if LibretroCore.sharedInstance().azaharRoomActive() {
+             allOptions.subtract([.saveState, .quickLoadState, .stateList, .fastForward, .rewind, .slowMotion, .reload])
+diff --git a/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift b/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift
+index 2fc7931..ef18f0a 100644
+--- a/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift
++++ b/ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift
+@@ -289,6 +289,11 @@ extension GameOption {
+             }))
+             
+         case .cheatCode:
++            if firstGame.isAzahar3DS,
++               (Bundle.main.object(forInfoDictionaryKey: "ManicRoomBuildMode") as? String) == "experimental",
++               LibretroCore.sharedInstance().azaharRoomActive() {
++                return
++            }
+             if firstGame.gameType == .arcade {
+                 if firstGame.defaultCore == 0 {
+                     UIView.makeAlert(detail: R.string.localizable.mameCheatCodeDesc(), cancelTitle: R.string.localizable.confirmTitle())
+diff --git a/ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift b/ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift
+index 3da539d..b04e150 100644
+--- a/ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift
++++ b/ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift
+@@ -1609,6 +1609,9 @@ extension PlayViewController {
+         guard !manicGame.safeMode else { return }
+         guard !isWFCConnect else { return }
+         guard !isHardcoreMode else { return }
++        let experimentalAzahar = manicGame.isAzahar3DS &&
++            (Bundle.main.object(forInfoDictionaryKey: "ManicRoomBuildMode") as? String) == "experimental"
++        if experimentalAzahar && LibretroCore.sharedInstance().azaharRoomActive() { return }
+         if manicGame.gameType == ._3ds {
+             if manicGame.isCitra3DS {
+                 let identifier = manicGame.identifierFor3DS
+@@ -1629,8 +1632,20 @@ extension PlayViewController {
+                     }
+                 }
+             } else if manicGame.isAzahar3DS {
+-                let identifier = manicGame.identifierFor3DS
+-                if identifier != 0 {
++                if experimentalAzahar {
++                    LibretroCore.sharedInstance().resetCheatCode()
++                    var enableCheats: [String] = []
++                    for (index, cheatCode) in manicGame.gameCheats.enumerated() where cheatCode.activate {
++                        let coreCode = cheatCode.code.replacingOccurrences(of: "\n", with: "+")
++                        LibretroCore.sharedInstance().addCheatCode(coreCode, index: UInt32(index), enable: true)
++                        enableCheats.append(cheatCode.name)
++                    }
++                    if !enableCheats.isEmpty {
++                        UIView.makeToast(message: R.string.localizable.gameCheatActivateSuccess(String.successMessage(from: enableCheats)))
++                    }
++                } else {
++                    let identifier = manicGame.identifierFor3DS
++                    if identifier == 0 { return }
+                     var cheatsTxt = ""
+                     var enableCheats: [String] = []
+                     for cheatCode in manicGame.gameCheats {

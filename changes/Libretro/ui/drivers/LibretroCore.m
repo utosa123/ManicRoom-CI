@@ -31,6 +31,7 @@
 #include "../ui_companion_driver.h"
 #include "../../audio/audio_driver.h"
 #include "../../configuration.h"
+#include "../../paths.h"
 #include "../../frontend/frontend.h"
 #include "../../input/drivers/cocoa_input.h"
 #include "../../input/drivers_keyboard/keyboard_event_apple.h"

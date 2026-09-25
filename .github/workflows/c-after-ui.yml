@@ -98,8 +98,8 @@ jobs:
         id: ipa
         run: |
           bash changes/ManicEMU/Scripts/Room/package-unsigned.sh app-out
-          mv app-out/ManicRoom-experimental-UNSIGNED.ipa app-out/ManicRoom-experimental-diag-UNSIGNED.ipa
-          shasum -a 256 app-out/ManicRoom-experimental-diag-UNSIGNED.ipa > app-out/IPA-SHA256SUMS
+          mv app-out/ManicRoom-experimental-UNSIGNED.ipa app-out/ManicRoom-experimental-storage-diag-UNSIGNED.ipa
+          shasum -a 256 app-out/ManicRoom-experimental-storage-diag-UNSIGNED.ipa > app-out/IPA-SHA256SUMS
       - name: Record separate outcomes even after a failure
         if: always()
         env:

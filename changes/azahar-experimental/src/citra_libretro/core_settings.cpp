@@ -1126,12 +1126,17 @@ static void ParseStorageOptions(void) {
 #endif
     if (use_libretro_saves) {
         auto target_dir = LibRetro::GetSaveDir();
+        RoomCDiag::Log("ParseStorageOptions GetSaveDir=%s", RoomCDiag::StoragePathForLog(target_dir).c_str());
         if (target_dir.empty()) {
             LOG_INFO(Frontend, "No save dir provided; trying system dir...");
             target_dir = LibRetro::GetSystemDir();
+            RoomCDiag::Log("ParseStorageOptions GetSystemDir=%s", RoomCDiag::StoragePathForLog(target_dir).c_str());
+        } else {
+            RoomCDiag::Log("ParseStorageOptions GetSystemDir=<not queried; save dir provided>");
         }
 
         if (!target_dir.empty()) {
+            RoomCDiag::Log("ParseStorageOptions target_dir before append=%s", RoomCDiag::StoragePathForLog(target_dir).c_str());
             if (!target_dir.ends_with("/"))
                 target_dir += "/";
 
@@ -1139,16 +1144,21 @@ static void ParseStorageOptions(void) {
             // (the frontend may have already set a 3DS-specific save directory)
             if (!target_dir.ends_with("3DS/") && !target_dir.ends_with("3ds/"))
                 target_dir += "3DS/";
+            RoomCDiag::Log("ParseStorageOptions target_dir after append=%s", RoomCDiag::StoragePathForLog(target_dir).c_str());
 
             // Ensure that this new dir exists
             if (!FileUtil::CreateDir(target_dir)) {
+                RoomCDiag::Log("ParseStorageOptions CreateDir RETURN success=0 UserDir=%s", RoomCDiag::StoragePathForLog(FileUtil::GetUserPath(FileUtil::UserPath::UserDir)).c_str());
                 LOG_ERROR(Frontend, "Failed to create \"{}\". Using Azahar's default paths.",
                           target_dir);
             } else {
                 FileUtil::SetUserPath(target_dir);
                 const auto& target_dir_result = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
+                RoomCDiag::Log("ParseStorageOptions SetUserPath RETURN UserDir=%s", RoomCDiag::StoragePathForLog(target_dir_result).c_str());
                 LOG_INFO(Frontend, "User dir set to \"{}\".", target_dir_result);
             }
+        } else {
+            RoomCDiag::Log("ParseStorageOptions target_dir=<empty> UserDir=%s", RoomCDiag::StoragePathForLog(FileUtil::GetUserPath(FileUtil::UserPath::UserDir)).c_str());
         }
     }
 }

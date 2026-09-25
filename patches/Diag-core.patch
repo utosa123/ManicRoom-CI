@@ -1,3 +1,5 @@
+diff --git a/src/citra_libretro/citra_libretro.cpp b/src/citra_libretro/citra_libretro.cpp
+index 064e432..fc235ee 100644
 --- a/src/citra_libretro/citra_libretro.cpp
 +++ b/src/citra_libretro/citra_libretro.cpp
 @@ -2,6 +2,7 @@
@@ -8,7 +10,7 @@
  #include "citra_libretro/room_session.h"
  #include "common/file_util.h"
  #include "core/hle/service/cfg/cfg.h"
-@@ -81,6 +82,8 @@
+@@ -81,6 +82,8 @@ static retro_keyboard_callback_t s_retro_keyboard_callback = nullptr;
  static std::shared_ptr<SoftwareKeyboard::AppleKeyboard> s_apple_keyboard;
  
  void retro_init() {
@@ -17,7 +19,7 @@
      emu_instance = new CitraLibRetro();
      Common::Log::LibRetroStart(LibRetro::GetLoggingBackend());
      Common::Log::SetGlobalFilter(emu_instance->log_filter);
-@@ -113,6 +116,7 @@
+@@ -113,6 +116,7 @@ void retro_init() {
  }
  
  void retro_deinit() {
@@ -25,7 +27,7 @@
      LOG_DEBUG(Frontend, "Shutting down core...");
      LibRetro::RoomSession::GameStopped();
      retro_set_keyboard_callback(nullptr);
-@@ -138,6 +142,7 @@
+@@ -138,6 +142,7 @@ unsigned retro_api_version() {
   * Updates Citra's settings with Libretro's.
   */
  static void UpdateSettings() {
@@ -33,7 +35,7 @@
      LibRetro::ParseCoreOptions();
  
      struct retro_input_descriptor desc[] = {
-@@ -230,7 +235,9 @@
+@@ -230,7 +235,9 @@ static void UpdateSettings() {
      }
  
      if (!emu_instance->emu_window) {
@@ -43,7 +45,7 @@
      }
  
      // Update the framebuffer sizing.
-@@ -243,6 +250,11 @@
+@@ -243,6 +250,11 @@ static void UpdateSettings() {
   * libretro callback; Called every game tick.
   */
  void retro_run() {
@@ -55,7 +57,7 @@
      if (!emu_instance->game_loaded) {
          // Game failed to load (e.g. encrypted ROM, bad path).
          // Present an empty frame so RetroArch doesn't hang.
-@@ -307,7 +319,11 @@
+@@ -307,7 +319,11 @@ void retro_run() {
  #endif
  
      while (!emu_instance->emu_window->HasSubmittedFrame()) {
@@ -67,21 +69,22 @@
  
          if (result == Core::System::ResultStatus::ShutdownRequested) {
              // Initial setup (Artic Base) completed — the 3DS requested a reboot,
-@@ -398,46 +414,49 @@
+@@ -398,46 +414,51 @@ static void setup_memory_maps() {
  }
  
  static bool do_load_game() {
 +    RoomCDiag::Span diag("do_load_game");
  #ifdef MANIC_ROOM_EXPERIMENT
-     if (!FileUtil::GetUserPath(FileUtil::UserPath::UserDir).ends_with("/RoomExperiment-v1/3DS/")) {
+-    if (!FileUtil::GetUserPath(FileUtil::UserPath::UserDir).ends_with("/RoomExperiment-v1/3DS/")) {
++    const auto& user_dir = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
++    RoomCDiag::Log("do_load_game storage guard UserDir=%s", RoomCDiag::StoragePathForLog(user_dir).c_str());
++    if (!user_dir.ends_with("/RoomExperiment-v1/3DS/")) {
          LibRetro::DisplayMessage("Experimental core requires isolated RoomExperiment-v1/3DS storage.");
          LOG_ERROR(Frontend, "Refusing game load: experimental save directory is not configured");
 -        return false;
--    }
--#endif
 +        return diag.Result(false);
-+    }
-+#endif
+     }
+ #endif
 +    RoomCDiag::Log("Core.System.Load ENTER");
      const Core::System::ResultStatus load_result{
          Core::System::GetInstance().Load(*emu_instance->emu_window, LibRetro::settings.file_path)};
@@ -128,7 +131,7 @@
      }
  
      u64 program_id{};
-@@ -445,15 +464,17 @@
+@@ -445,15 +466,17 @@ static bool do_load_game() {
      Core::System::GetInstance().GPU().ApplyPerProgramSettings(program_id);
  
      if (Settings::values.use_disk_shader_cache) {
@@ -147,7 +150,7 @@
  }
  
  #ifdef ENABLE_OPENGL
-@@ -463,6 +484,7 @@
+@@ -463,6 +486,7 @@ static void* load_opengl_func(const char* name) {
  #endif
  
  static void context_reset() {
@@ -155,7 +158,7 @@
      LOG_DEBUG(Frontend, "context_reset");
  
      switch (Settings::values.graphics_api.GetValue()) {
-@@ -498,7 +520,9 @@
+@@ -498,7 +522,9 @@ static void context_reset() {
  #endif
  #ifdef ENABLE_VULKAN
      case Settings::GraphicsAPI::Vulkan:
@@ -165,7 +168,7 @@
          break;
  #endif
      default:
-@@ -506,7 +530,9 @@
+@@ -506,7 +532,9 @@ static void context_reset() {
          break;
      }
  
@@ -175,7 +178,7 @@
  
      if (!emu_instance->game_loaded) {
          emu_instance->game_loaded = do_load_game();
-@@ -539,6 +565,7 @@
+@@ -539,6 +567,7 @@ void retro_reset() {
   * libretro callback; Called when a game is to be loaded.
   */
  bool retro_load_game(const struct retro_game_info* info) {
@@ -183,7 +186,7 @@
      LOG_INFO(Frontend, "Starting Azahar RetroArch game...");
  
  #if CITRA_ARCH(x86_64) && CITRA_HAS_SSE42
-@@ -546,11 +573,12 @@
+@@ -546,11 +575,12 @@ bool retro_load_game(const struct retro_game_info* info) {
          LOG_CRITICAL(Frontend, "This CPU does not support SSE4.2, which is required by this build");
          LibRetro::DisplayMessage(
              "This CPU does not support SSE4.2, which is required by this build");
@@ -197,7 +200,7 @@
      
      // Initialize libretro camera interface
      LibRetro::Camera::InitializeCameraInterface();
-@@ -565,12 +593,16 @@
+@@ -565,12 +595,16 @@ bool retro_load_game(const struct retro_game_info* info) {
      // true, leaving the frontend stuck on a black screen.
      // GetLoader + LoadKernelMemoryMode only read ROM headers — no renderer needed.
      {
@@ -207,16 +210,15 @@
          if (!loader) {
              LibRetro::DisplayMessage("Failed to obtain loader for the specified ROM.");
 -            return false;
--        }
 +            return diag.Result(false);
-+        }
+         }
 +        RoomCDiag::Log("LoadKernelMemoryMode ENTER");
          auto [memory_mode, result] = loader->LoadKernelMemoryMode();
 +        RoomCDiag::Log("LoadKernelMemoryMode RETURN status=%d", int(result));
          if (result != Loader::ResultStatus::Success) {
              switch (result) {
              case Loader::ResultStatus::ErrorEncrypted:
-@@ -587,7 +619,7 @@
+@@ -587,7 +621,7 @@ bool retro_load_game(const struct retro_game_info* info) {
                  LibRetro::DisplayMessage("Failed to load ROM metadata.");
                  break;
              }
@@ -225,7 +227,7 @@
          }
          // Stash the loader so System::Load can reuse it instead of re-opening
          Core::System::GetInstance().RegisterAppLoaderEarly(loader);
-@@ -595,7 +627,7 @@
+@@ -595,7 +629,7 @@ bool retro_load_game(const struct retro_game_info* info) {
  
      if (!LibRetro::SetPixelFormat(RETRO_PIXEL_FORMAT_XRGB8888)) {
          LibRetro::DisplayMessage("XRGB8888 is not supported.");
@@ -234,7 +236,7 @@
      }
  
      emu_instance->emu_window->UpdateLayout();
-@@ -620,7 +652,7 @@
+@@ -620,7 +654,7 @@ bool retro_load_game(const struct retro_game_info* info) {
          emu_instance->hw_render.bottom_left_origin = true;
          if (!LibRetro::SetHWRenderer(&emu_instance->hw_render)) {
              LibRetro::DisplayMessage("Failed to set HW renderer");
@@ -243,7 +245,7 @@
          }
          LibRetro::SetFramebufferCallback(emu_instance->hw_render.get_current_framebuffer);
  #endif
-@@ -636,7 +668,7 @@
+@@ -636,7 +670,7 @@ bool retro_load_game(const struct retro_game_info* info) {
          emu_instance->hw_render.cache_context = true;
          if (!LibRetro::SetHWRenderer(&emu_instance->hw_render)) {
              LibRetro::DisplayMessage("Failed to set HW renderer");
@@ -252,7 +254,7 @@
          }
  
          // Set up Vulkan context negotiation interface
-@@ -651,10 +683,12 @@
+@@ -651,10 +685,12 @@ bool retro_load_game(const struct retro_game_info* info) {
  #endif
          break;
      case Settings::GraphicsAPI::Software:
@@ -267,7 +269,7 @@
          break;
      }
  
-@@ -662,7 +696,7 @@
+@@ -662,7 +698,7 @@ bool retro_load_game(const struct retro_game_info* info) {
          RETRO_SERIALIZATION_QUIRK_CORE_VARIABLE_SIZE | RETRO_SERIALIZATION_QUIRK_MUST_INITIALIZE;
      LibRetro::SetSerializationQuirks(quirks);
  
@@ -276,6 +278,8 @@
  }
  
  void retro_unload_game() {
+diff --git a/src/citra_libretro/core_settings.cpp b/src/citra_libretro/core_settings.cpp
+index 6b0ce87..9dfc133 100644
 --- a/src/citra_libretro/core_settings.cpp
 +++ b/src/citra_libretro/core_settings.cpp
 @@ -1,3 +1,4 @@
@@ -283,7 +287,7 @@
  // Copyright Citra Emulator Project / Azahar Emulator Project
  // Licensed under GPLv2 or any later version
  // Refer to the license.txt file included.
-@@ -831,10 +832,13 @@
+@@ -831,10 +832,13 @@ static void ParseCpuOptions(void) {
      Settings::values.use_cpu_jit =
          LibRetro::FetchVariable(config::cpu::use_cpu_jit, config::enabled) == config::enabled;
  #if defined(IOS)
@@ -298,19 +302,71 @@
      auto cpu_clock = LibRetro::FetchVariable(config::cpu::cpu_clock_percentage, "100");
      Settings::values.cpu_clock_percentage = std::stoi(cpu_clock);
  }
+@@ -1122,12 +1126,17 @@ static void ParseStorageOptions(void) {
+ #endif
+     if (use_libretro_saves) {
+         auto target_dir = LibRetro::GetSaveDir();
++        RoomCDiag::Log("ParseStorageOptions GetSaveDir=%s", RoomCDiag::StoragePathForLog(target_dir).c_str());
+         if (target_dir.empty()) {
+             LOG_INFO(Frontend, "No save dir provided; trying system dir...");
+             target_dir = LibRetro::GetSystemDir();
++            RoomCDiag::Log("ParseStorageOptions GetSystemDir=%s", RoomCDiag::StoragePathForLog(target_dir).c_str());
++        } else {
++            RoomCDiag::Log("ParseStorageOptions GetSystemDir=<not queried; save dir provided>");
+         }
+ 
+         if (!target_dir.empty()) {
++            RoomCDiag::Log("ParseStorageOptions target_dir before append=%s", RoomCDiag::StoragePathForLog(target_dir).c_str());
+             if (!target_dir.ends_with("/"))
+                 target_dir += "/";
+ 
+@@ -1135,16 +1144,21 @@ static void ParseStorageOptions(void) {
+             // (the frontend may have already set a 3DS-specific save directory)
+             if (!target_dir.ends_with("3DS/") && !target_dir.ends_with("3ds/"))
+                 target_dir += "3DS/";
++            RoomCDiag::Log("ParseStorageOptions target_dir after append=%s", RoomCDiag::StoragePathForLog(target_dir).c_str());
+ 
+             // Ensure that this new dir exists
+             if (!FileUtil::CreateDir(target_dir)) {
++                RoomCDiag::Log("ParseStorageOptions CreateDir RETURN success=0 UserDir=%s", RoomCDiag::StoragePathForLog(FileUtil::GetUserPath(FileUtil::UserPath::UserDir)).c_str());
+                 LOG_ERROR(Frontend, "Failed to create \"{}\". Using Azahar's default paths.",
+                           target_dir);
+             } else {
+                 FileUtil::SetUserPath(target_dir);
+                 const auto& target_dir_result = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
++                RoomCDiag::Log("ParseStorageOptions SetUserPath RETURN UserDir=%s", RoomCDiag::StoragePathForLog(target_dir_result).c_str());
+                 LOG_INFO(Frontend, "User dir set to \"{}\".", target_dir_result);
+             }
++        } else {
++            RoomCDiag::Log("ParseStorageOptions target_dir=<empty> UserDir=%s", RoomCDiag::StoragePathForLog(FileUtil::GetUserPath(FileUtil::UserPath::UserDir)).c_str());
+         }
+     }
+ }
+diff --git a/src/citra_libretro/room_c_diag.h b/src/citra_libretro/room_c_diag.h
+new file mode 100644
+index 0000000..b6c4198
 --- /dev/null
 +++ b/src/citra_libretro/room_c_diag.h
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,44 @@
 +// Temporary startup diagnostics. No emulator state changes or exception handling.
 +#pragma once
 +#include <atomic>
 +#include <cstdarg>
 +#include <cstdio>
 +#include <exception>
++#include <string>
 +#if defined(IOS)
 +#include <os/log.h>
 +#endif
 +namespace RoomCDiag {
++// Keep the storage suffix needed for diagnosis without logging the container UUID.
++inline std::string StoragePathForLog(const std::string& path) {
++    if (path.empty()) return "<empty>";
++    const auto documents = path.find("/Documents/");
++    if (documents != std::string::npos) return "[path]" + path.substr(documents);
++    if (path.ends_with("/Documents")) return "[path]/Documents";
++    return "[path outside Documents]";
++}
 +inline void Log(const char* format, ...) {
 +#if defined(IOS)
 +    char text[2048]; va_list args; va_start(args, format);

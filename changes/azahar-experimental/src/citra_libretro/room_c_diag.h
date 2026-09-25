@@ -4,10 +4,19 @@
 #include <cstdarg>
 #include <cstdio>
 #include <exception>
+#include <string>
 #if defined(IOS)
 #include <os/log.h>
 #endif
 namespace RoomCDiag {
+// Keep the storage suffix needed for diagnosis without logging the container UUID.
+inline std::string StoragePathForLog(const std::string& path) {
+    if (path.empty()) return "<empty>";
+    const auto documents = path.find("/Documents/");
+    if (documents != std::string::npos) return "[path]" + path.substr(documents);
+    if (path.ends_with("/Documents")) return "[path]/Documents";
+    return "[path outside Documents]";
+}
 inline void Log(const char* format, ...) {
 #if defined(IOS)
     char text[2048]; va_list args; va_start(args, format);

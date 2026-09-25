@@ -416,7 +416,9 @@ static void setup_memory_maps() {
 static bool do_load_game() {
     RoomCDiag::Span diag("do_load_game");
 #ifdef MANIC_ROOM_EXPERIMENT
-    if (!FileUtil::GetUserPath(FileUtil::UserPath::UserDir).ends_with("/RoomExperiment-v1/3DS/")) {
+    const auto& user_dir = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
+    RoomCDiag::Log("do_load_game storage guard UserDir=%s", RoomCDiag::StoragePathForLog(user_dir).c_str());
+    if (!user_dir.ends_with("/RoomExperiment-v1/3DS/")) {
         LibRetro::DisplayMessage("Experimental core requires isolated RoomExperiment-v1/3DS storage.");
         LOG_ERROR(Frontend, "Refusing game load: experimental save directory is not configured");
         return diag.Result(false);

@@ -5,7 +5,7 @@ from macho_export_decoder import export_trie
 ORIGINAL='183159290d777d42a68c17f5f4d90d8b88f7aa0281e4788bad4e5954a6df940c'
 UNSUPPORTED={'_retro_azahar_'+n for n in ('extension_version','install_cia','remove_amiibo')}
 ADAPTERS={'_retro_azahar_'+n for n in ('set_keyboard_callback','keyboard_input','load_amiibo','is_searching_amiibo')}
-ROOM={'_retro_azahar_room_'+n for n in ('api_version','snapshot','join','leave')}
+ROOM={'_retro_azahar_room_'+n for n in ('api_version','snapshot','join','leave','host','close','is_hosting')}
 def parse(path):
     b=Path(path).read_bytes();assert struct.unpack_from('<II',b)==(0xfeedfacf,0x100000c),'require thin arm64 Mach-O'
     assert struct.unpack_from('<I',b,12)[0]==6,'require MH_DYLIB'

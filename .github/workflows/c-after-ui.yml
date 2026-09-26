@@ -44,8 +44,34 @@ jobs:
             logs/
             verified-B/
           retention-days: 7
-  C:
+  windows-host:
     needs: verify-B
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - name: Prepare pinned Room transport with host patch
+        run: python ci/prepare.py windows
+      - name: Build and test Room transport with self join and close
+        shell: pwsh
+        run: |
+          cmake -S src/azahar/tests/room_bridge -B test-build -G 'Visual Studio 17 2022' -A x64 2>&1 | Tee-Object logs/host-configure.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build test-build --config Release --parallel 2 2>&1 | Tee-Object logs/host-build.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --test-dir test-build -C Release --output-on-failure 2>&1 | Tee-Object logs/host-ctest.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: C-windows-host-transport-logs
+          path: |
+            logs/
+            test-build/Testing/Temporary/
+          retention-days: 7
+  C:
+    needs: [verify-B, windows-host]
     runs-on: macos-26
     timeout-minutes: 180
     steps:
@@ -63,6 +89,8 @@ jobs:
         run: python3 ci/prepare.py experimental
       - name: Verify YW2 and Cheat source gates
         run: python3 ci/check-yw2-cheat.py
+      - name: Verify Room host and UI source gates
+        run: python3 ci/check-room-host.py
       - name: 1 Compile candidate iOS arm64 dylib
         id: compile
         run: bash ci/compile-core-ios.sh src/azahar core-out
@@ -100,8 +128,8 @@ jobs:
         id: ipa
         run: |
           bash changes/ManicEMU/Scripts/Room/package-unsigned.sh app-out
-          mv app-out/ManicRoom-experimental-UNSIGNED.ipa app-out/ManicRoom-experimental-YW2-cheat-UNSIGNED.ipa
-          shasum -a 256 app-out/ManicRoom-experimental-YW2-cheat-UNSIGNED.ipa > app-out/IPA-SHA256SUMS
+          mv app-out/ManicRoom-experimental-UNSIGNED.ipa app-out/ManicRoom-experimental-host-cheat-UNSIGNED.ipa
+          shasum -a 256 app-out/ManicRoom-experimental-host-cheat-UNSIGNED.ipa > app-out/IPA-SHA256SUMS
       - name: Record separate outcomes even after a failure
         if: always()
         env:

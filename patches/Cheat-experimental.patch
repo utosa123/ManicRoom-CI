@@ -12,7 +12,7 @@ index 6d5929b..a546e62 100644
      add_compile_definitions(MANIC_ROOM_EXPERIMENT=1)
  endif()
 diff --git a/src/citra_libretro/citra_libretro.cpp b/src/citra_libretro/citra_libretro.cpp
-index fc235ee..1f7e2fd 100644
+index fc235ee..88e6120 100644
 --- a/src/citra_libretro/citra_libretro.cpp
 +++ b/src/citra_libretro/citra_libretro.cpp
 @@ -4,8 +4,11 @@
@@ -35,14 +35,13 @@ index fc235ee..1f7e2fd 100644
      retro_set_keyboard_callback(nullptr);
      LibRetro::Camera::ShutdownCameraInterface();
      Core::System::GetInstance().Shutdown();
-@@ -830,9 +834,29 @@ size_t retro_get_memory_size(unsigned id) {
+@@ -830,9 +834,27 @@ size_t retro_get_memory_size(unsigned id) {
      return 0;
  }
  
 -void retro_cheat_reset() {}
 +void retro_cheat_reset() {
 +#ifdef MANIC_ROOM_EXPERIMENT
-+    if (LibRetro::RoomSession::Active()) return;
 +    Core::System::GetInstance().CheatEngine().ResetLibretroCheats();
 +#endif
 +}
@@ -50,7 +49,6 @@ index fc235ee..1f7e2fd 100644
 -void retro_cheat_set(unsigned index, bool enabled, const char* code) {}
 +void retro_cheat_set(unsigned index, bool enabled, const char* code) {
 +#ifdef MANIC_ROOM_EXPERIMENT
-+    if (LibRetro::RoomSession::Active()) return;
 +    auto& engine = Core::System::GetInstance().CheatEngine();
 +    if (!code || !*code) {
 +        engine.SetLibretroCheat(index, nullptr);
@@ -68,20 +66,10 @@ index fc235ee..1f7e2fd 100644
  // Amiibo support functions - declared in same style as other retro_ functions
  bool retro_load_amiibo(const char* path) {
 diff --git a/src/core/cheats/cheats.cpp b/src/core/cheats/cheats.cpp
-index e5bfca2..3e0d149 100644
+index e5bfca2..d7a3ba5 100644
 --- a/src/core/cheats/cheats.cpp
 +++ b/src/core/cheats/cheats.cpp
-@@ -10,6 +10,9 @@
- #include "core/cheats/gateway_cheat.h"
- #include "core/core.h"
- #include "core/core_timing.h"
-+#ifdef MANIC_ROOM_EXPERIMENT
-+#include "citra_libretro/room_session.h"
-+#endif
- 
- namespace Cheats {
- 
-@@ -61,6 +64,22 @@ void CheatEngine::UpdateCheat(std::size_t index, std::shared_ptr<CheatBase>&& ne
+@@ -61,6 +61,22 @@ void CheatEngine::UpdateCheat(std::size_t index, std::shared_ptr<CheatBase>&& ne
      cheats_list[index] = std::move(new_cheat);
  }
  
@@ -104,35 +92,25 @@ index e5bfca2..3e0d149 100644
  void CheatEngine::SaveCheatFile(u64 title_id) const {
      const std::string cheat_dir = FileUtil::GetUserPath(FileUtil::UserPath::CheatsDir);
      const std::string filepath = fmt::format("{}{:016X}.txt", cheat_dir, title_id);
-@@ -104,10 +123,27 @@ void CheatEngine::LoadCheatFile(u64 title_id) {
- }
- 
+@@ -106,12 +122,17 @@ void CheatEngine::LoadCheatFile(u64 title_id) {
  void CheatEngine::RunCallback([[maybe_unused]] std::uintptr_t user_data, s64 cycles_late) {
-+#ifdef MANIC_ROOM_EXPERIMENT
-+    // Preserve the configured cheats while a Room join, session, or leave is active.
-+    // The next callback after leaving resumes normal execution.
-+    if (LibRetro::RoomSession::Active()) {
-+        system.CoreTiming().ScheduleEvent(run_interval_ticks - cycles_late, event);
-+        return;
-+    }
-+#endif
      {
          std::shared_lock lock{cheats_list_mutex};
 -#ifndef MANIC_ROOM_EXPERIMENT
          for (const auto& cheat : cheats_list) {
+             if (cheat->IsEnabled()) {
+                 cheat->Execute(system, process_id);
+             }
+         }
 +#ifdef MANIC_ROOM_EXPERIMENT
-+            if (LibRetro::RoomSession::Active()) break;
-+#endif
++        for (const auto& [index, cheat] : libretro_cheats) {
 +            if (cheat->IsEnabled()) {
 +                cheat->Execute(system, process_id);
 +            }
 +        }
-+#ifdef MANIC_ROOM_EXPERIMENT
-+        for (const auto& [index, cheat] : libretro_cheats) {
-+            if (LibRetro::RoomSession::Active()) break;
-             if (cheat->IsEnabled()) {
-                 cheat->Execute(system, process_id);
-             }
+ #endif
+     }
+     system.CoreTiming().ScheduleEvent(run_interval_ticks - cycles_late, event);
 diff --git a/src/core/cheats/cheats.h b/src/core/cheats/cheats.h
 index c3a9e84..b6548bc 100644
 --- a/src/core/cheats/cheats.h

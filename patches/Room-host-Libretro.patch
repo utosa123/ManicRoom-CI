@@ -1,0 +1,98 @@
+diff --git a/pkg/apple/ManicEMU/AzaharRoomABI.h b/pkg/apple/ManicEMU/AzaharRoomABI.h
+index a880894..b9f8a82 100644
+--- a/pkg/apple/ManicEMU/AzaharRoomABI.h
++++ b/pkg/apple/ManicEMU/AzaharRoomABI.h
+@@ -10,7 +10,7 @@ extern "C" {
+ #define AZ_ROOM_EXPORT __attribute__((visibility("default")))
+ #endif
+ 
+-/* ABI 1. All strings are UTF-8, NUL terminated and copied before join returns.
++/* ABI 2. All strings are UTF-8, NUL terminated and copied before join/host returns.
+  * Caller owns snapshot storage; no pointers or callbacks cross this boundary.
+  * Calls must not overlap dlclose. Query functions do not initialize the core.
+  * Join: 0 = accepted, NOT joined; 1 = invalid input; 2 = not ready; 3 = busy;
+@@ -33,6 +33,11 @@ AZ_ROOM_EXPORT int32_t retro_azahar_room_snapshot(az_room_snapshot* out, uint32_
+ AZ_ROOM_EXPORT int32_t retro_azahar_room_join(const char* ip, uint32_t port,
+                                            const char* nickname, const char* password);
+ AZ_ROOM_EXPORT int32_t retro_azahar_room_leave(void);
++/* Host accepts a request; is_hosting is 1 only after self JoinSuccess. */
++AZ_ROOM_EXPORT int32_t retro_azahar_room_host(uint32_t port, const char* nickname,
++                                           const char* password);
++AZ_ROOM_EXPORT int32_t retro_azahar_room_close(void);
++AZ_ROOM_EXPORT int32_t retro_azahar_room_is_hosting(void);
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/ui/drivers/LibretroCore.m b/ui/drivers/LibretroCore.m
+index 67821be..d7722b0 100644
+--- a/ui/drivers/LibretroCore.m
++++ b/ui/drivers/LibretroCore.m
+@@ -1433,7 +1433,7 @@ static dylib_t active_room_core(void) {
+     runloop_state_t *runloop = runloop_state_get_ptr();
+     if (!runloop || !runloop->lib_handle) return NULL;
+     uint32_t (*version)(void) = (void *)dylib_proc(runloop->lib_handle, "retro_azahar_room_api_version");
+-    if (version && version() == 1) return runloop->lib_handle;
++    if (version && version() == 2) return runloop->lib_handle;
+ #endif
+     return NULL;
+ }
+@@ -1457,8 +1457,10 @@ static dylib_t active_room_core(void) {
+         NSLog(@"AzaharRoom state=%u error=%u protocol=%u", state.state, state.error, state.protocol);
+         lastState = state.state; lastError = state.error;
+     }
++    int32_t (*hosting)(void) = (void *)dylib_proc(lib, "retro_azahar_room_is_hosting");
+     return @{ @"supported": @YES, @"state": @(state.state), @"error": @(state.error),
+-              @"port": @(state.default_port), @"protocol": @(state.protocol), @"members": names };
++              @"port": @(state.default_port), @"protocol": @(state.protocol),
++              @"hosting": @(hosting && hosting() == 1), @"members": names };
+ }
+ 
+ - (BOOL)azaharRoomActive {
+@@ -1500,6 +1502,34 @@ static dylib_t active_room_core(void) {
+     if (leave) leave(); // Nonblocking; core lifecycle drains its worker before unload.
+ }
+ 
++- (NSInteger)hostAzaharRoom:(NSUInteger)port nickname:(NSString *)nickname password:(NSString *)password {
++    NSCharacterSet *nullCharacter = [NSCharacterSet characterSetWithRange:NSMakeRange(0, 1)];
++    if (![NSThread isMainThread] || port < 1 || port > 65535 ||
++        [nickname rangeOfCharacterFromSet:nullCharacter].location != NSNotFound ||
++        [password rangeOfCharacterFromSet:nullCharacter].location != NSNotFound) return 1;
++    dylib_t lib = active_room_core();
++    if (!lib) return 2;
++    int32_t (*host)(uint32_t, const char *, const char *) =
++        (void *)dylib_proc(lib, "retro_azahar_room_host");
++    if (!host) return 2;
++    NSInteger result = host((uint32_t)port, nickname.UTF8String, password.UTF8String);
++    if (result == 0) {
++        [[self getRetroArch] fastForward:0];
++        [[self getRetroArch] setSlowmotionEnable:NO ratio:1];
++        [[self getRetroArch] setRewind:NO];
++        [[self getRetroArch] setRewindEnable:NO granularity:2 bufferSizeMB:20 bufferSizeStepMB:10 mute:NO];
++    }
++    return result;
++}
++
++- (void)closeAzaharRoom {
++    if (![NSThread isMainThread]) { dispatch_async(dispatch_get_main_queue(), ^{ [self closeAzaharRoom]; }); return; }
++    dylib_t lib = active_room_core();
++    if (!lib) return;
++    int32_t (*closeRoom)(void) = (void *)dylib_proc(lib, "retro_azahar_room_close");
++    if (closeRoom) closeRoom();
++}
++
+ - (void)azaharRoomDidEnterBackground:(NSNotification *)notification {
+     [self leaveAzaharRoom];
+ }
+diff --git a/ui/drivers/cocoa/LibretroCore.h b/ui/drivers/cocoa/LibretroCore.h
+index f03c563..9b7fcbd 100644
+--- a/ui/drivers/cocoa/LibretroCore.h
++++ b/ui/drivers/cocoa/LibretroCore.h
+@@ -97,6 +97,8 @@ typedef NS_ENUM(NSInteger, LibretroNetplayEvent) {
+ - (NSInteger)joinAzaharRoom:(NSString *)host port:(NSUInteger)port
+                   nickname:(NSString *)nickname password:(NSString *)password;
+ - (void)leaveAzaharRoom;
++- (NSInteger)hostAzaharRoom:(NSUInteger)port nickname:(NSString *)nickname password:(NSString *)password;
++- (void)closeAzaharRoom;
+ - (BOOL)azaharRoomActive;
+ - (NSUInteger)azaharKeyboardGeneration;
+ 

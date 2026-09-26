@@ -65,25 +65,28 @@ require("Real libretro GatewayCheat adapter", all(x in libretro for x in (
     "std::replace(gateway_code.begin(), gateway_code.end(), '+', '\\n')",
     "std::make_shared<Cheats::GatewayCheat>", "cheat->SetEnabled(enabled)",
     "engine.SetLibretroCheat(index, std::move(cheat))")))
-require("Room execution gate and resume path", all(x in cheats_cpp for x in (
-    "if (LibRetro::RoomSession::Active())", "ScheduleEvent(run_interval_ticks - cycles_late, event)",
+require("Cheats execute during Room", all(x in cheats_cpp for x in (
+    "ScheduleEvent(run_interval_ticks - cycles_late, event)",
     "for (const auto& [index, cheat] : libretro_cheats)", "cheat->Execute(system, process_id)")) and
+        "RoomSession::Active()" not in cheats_cpp and
         "ResetLibretroCheats()" not in cheats_cpp.split("void CheatEngine::RunCallback", 1)[1])
-require("Core refuses cheat edits during Room", libretro.count("if (LibRetro::RoomSession::Active()) return;") >= 2)
+require("Core allows cheat edits during Room", all(
+    "RoomSession::Active()" not in libretro.split(marker, 1)[1].split("\n}", 1)[0]
+    for marker in ("void retro_cheat_reset() {", "void retro_cheat_set(unsigned index")))
 
 option = source(args.manic, "ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOption.swift")
 perform = source(args.manic, "ManicEmu/ManicEmu/Sources/Business/Games/Models/GameOptionPerform.swift")
 play = source(args.manic, "ManicEmu/ManicEmu/Sources/Business/Play/VIewControllers/PlayViewController.swift")
 view = source(args.manic, "ManicEmu/ManicEmu/Sources/Business/CheatCode/Views/CheatCodeListView.swift")
-require("C-only cheat UI and Room gating", all(x in option for x in (
-    '"ManicRoomBuildMode"', "!game.isAzahar3DS || LibretroCore.sharedInstance().azaharRoomActive()",
+require("C-only cheat UI without Room gate", all(x in option for x in (
+    '"ManicRoomBuildMode"', "if !game.isAzahar3DS {",
     "allOptions.remove(.cheatCode)")) and "case .cheatCode:" in perform and
-        "LibretroCore.sharedInstance().azaharRoomActive()" in perform and
-        "roomCheatsLocked" in view and "guard !roomCheatsLocked" in view)
+        "azaharRoomActive()" not in perform.split("case .cheatCode:", 1)[1].split("case .", 1)[0] and
+        "roomCheatsLocked" not in view)
 require("C-only direct libretro cheat route", all(x in play for x in (
     "if experimentalAzahar", "resetCheatCode()", "addCheatCode(coreCode",
-    'replacingOccurrences(of: "\\n", with: "+")',
-    "experimentalAzahar && LibretroCore.sharedInstance().azaharRoomActive()")))
+    'replacingOccurrences(of: "\\n", with: "+")')) and
+        "experimentalAzahar && LibretroCore.sharedInstance().azaharRoomActive()" not in play)
 require("Experimental state/speed restrictions retained", all(x in option for x in (
     ".saveState", ".quickLoadState", ".stateList", ".fastForward", ".rewind", ".slowMotion")) and
         "#ifdef MANIC_ROOM_EXPERIMENT" in libretro and "size_t retro_serialize_size()" in libretro)

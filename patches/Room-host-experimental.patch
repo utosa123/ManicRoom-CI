@@ -1,0 +1,258 @@
+diff --git a/src/citra_libretro/libretro.osx.def b/src/citra_libretro/libretro.osx.def
+index c02637e..16918e2 100644
+--- a/src/citra_libretro/libretro.osx.def
++++ b/src/citra_libretro/libretro.osx.def
+@@ -11,6 +11,9 @@ _retro_azahar_room_api_version
+ _retro_azahar_room_snapshot
+ _retro_azahar_room_join
+ _retro_azahar_room_leave
++_retro_azahar_room_host
++_retro_azahar_room_close
++_retro_azahar_room_is_hosting
+ _retro_deinit
+ _retro_api_version
+ _retro_get_system_info
+diff --git a/src/citra_libretro/room_api.h b/src/citra_libretro/room_api.h
+index a880894..b9f8a82 100644
+--- a/src/citra_libretro/room_api.h
++++ b/src/citra_libretro/room_api.h
+@@ -10,7 +10,7 @@ extern "C" {
+ #define AZ_ROOM_EXPORT __attribute__((visibility("default")))
+ #endif
+ 
+-/* ABI 1. All strings are UTF-8, NUL terminated and copied before join returns.
++/* ABI 2. All strings are UTF-8, NUL terminated and copied before join/host returns.
+  * Caller owns snapshot storage; no pointers or callbacks cross this boundary.
+  * Calls must not overlap dlclose. Query functions do not initialize the core.
+  * Join: 0 = accepted, NOT joined; 1 = invalid input; 2 = not ready; 3 = busy;
+@@ -33,6 +33,11 @@ AZ_ROOM_EXPORT int32_t retro_azahar_room_snapshot(az_room_snapshot* out, uint32_
+ AZ_ROOM_EXPORT int32_t retro_azahar_room_join(const char* ip, uint32_t port,
+                                            const char* nickname, const char* password);
+ AZ_ROOM_EXPORT int32_t retro_azahar_room_leave(void);
++/* Host accepts a request; is_hosting is 1 only after self JoinSuccess. */
++AZ_ROOM_EXPORT int32_t retro_azahar_room_host(uint32_t port, const char* nickname,
++                                           const char* password);
++AZ_ROOM_EXPORT int32_t retro_azahar_room_close(void);
++AZ_ROOM_EXPORT int32_t retro_azahar_room_is_hosting(void);
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/src/citra_libretro/room_session.cpp b/src/citra_libretro/room_session.cpp
+index 76389b8..f1a79bc 100644
+--- a/src/citra_libretro/room_session.cpp
++++ b/src/citra_libretro/room_session.cpp
+@@ -23,6 +23,8 @@ Member::CallbackHandle<Network::RoomInformation> room_callback;
+ std::thread worker;
+ std::atomic<bool> cancel{false}, finished{true};
+ bool owns_network = false, ready = false;
++// Protected by snapshot_mutex. True from host request until server cleanup.
++bool host_mode = false;
+ std::string console_hash;
+ Network::MacAddress console_mac = Network::NoPreferredMac;
+ 
+@@ -57,20 +59,38 @@ void StopWorker() {
+     if (worker.joinable()) worker.join();
+ }
+ void Run(std::string ip, uint16_t port, std::string nick, std::string password,
+-         std::string hash, Network::MacAddress mac) noexcept {
++         std::string hash, Network::MacAddress mac, bool host) noexcept {
++    std::shared_ptr<Network::Room> server;
++    bool created = false;
+     try {
+-        member->Join(nick, hash, ip.c_str(), port, 0, mac,
+-                     password, "", [] { return cancel.load(); });
+-        // Covers a transport connection that never receives a room JoinSuccess.
+-        const auto deadline = std::chrono::steady_clock::now() + 10s;
+-        while (!cancel && member->IsConnected()) {
+-            if (member->GetState() == Member::State::Joining &&
+-                std::chrono::steady_clock::now() >= deadline) {
++        if (host) {
++            server = Network::GetRoom().lock();
++            if (!server || server->GetState() == Network::Room::State::Open ||
++                !(created = server->Create("Multiplayer Room", "", "", port, password,
++                                           Network::MaxConcurrentConnections, "", "", 0,
++                                           std::make_unique<Network::VerifyUser::NullBackend>()))) {
+                 std::lock_guard lock(snapshot_mutex);
+-                snapshot.error = 101;
+-                break;
++                snapshot.error = 102;
++            }
++        }
++        if (!host || created) {
++            if (!cancel) member->Join(nick, hash, ip.c_str(), port, 0, mac,
++                                      password, "", [] { return cancel.load(); });
++            // Covers a transport connection that never receives a room JoinSuccess.
++            const auto deadline = std::chrono::steady_clock::now() + 10s;
++            while (!cancel && member->IsConnected()) {
++                bool joining;
++                {
++                    std::lock_guard lock(snapshot_mutex);
++                    joining = snapshot.state == AZ_ROOM_JOINING;
++                }
++                if (joining && std::chrono::steady_clock::now() >= deadline) {
++                    std::lock_guard lock(snapshot_mutex);
++                    snapshot.error = 101;
++                    break;
++                }
++                std::this_thread::sleep_for(10ms);
+             }
+-            std::this_thread::sleep_for(10ms);
+         }
+     } catch (...) {
+         std::lock_guard lock(snapshot_mutex);
+@@ -78,8 +98,11 @@ void Run(std::string ip, uint16_t port, std::string nick, std::string password,
+     }
+     // A failed Join may have a client but no loop thread. Leave is idempotent.
+     member->Leave(true);
++    // Destroy sends the protocol CloseRoom to remote peers. Never run on UI thread.
++    if (created) server->Destroy();
+     {
+         std::lock_guard lock(snapshot_mutex);
++        host_mode = false;
+         snapshot.state = AZ_ROOM_IDLE;
+         ClearMembers();
+     }
+@@ -142,6 +165,7 @@ void GameReady(std::string hash, std::array<uint8_t, 6> mac) noexcept {
+         std::lock_guard lock(snapshot_mutex);
+         snapshot.state = AZ_ROOM_IDLE;
+         snapshot.error = 0;
++        host_mode = false;
+     } catch (...) {}
+ }
+ void GameStopped() noexcept {
+@@ -151,6 +175,7 @@ void GameStopped() noexcept {
+     console_hash.clear();
+     std::lock_guard lock(snapshot_mutex);
+     snapshot.state = AZ_ROOM_OFFLINE;
++    host_mode = false;
+     ClearMembers();
+ }
+ void Shutdown() noexcept {
+@@ -161,6 +186,7 @@ void Shutdown() noexcept {
+     {
+         std::lock_guard lock(snapshot_mutex);
+         snapshot.state = AZ_ROOM_OFFLINE;
++        host_mode = false;
+         ClearMembers();
+     }
+     if (member) {
+@@ -176,7 +202,11 @@ void Shutdown() noexcept {
+ bool Active() noexcept { return !finished.load(); }
+ }
+ 
+-extern "C" uint32_t retro_azahar_room_api_version() { return 1; }
++extern "C" uint32_t retro_azahar_room_api_version() { return 2; }
++extern "C" int32_t retro_azahar_room_is_hosting() {
++    std::lock_guard lock(snapshot_mutex);
++    return host_mode && snapshot.state == AZ_ROOM_JOINED ? 1 : 0;
++}
+ extern "C" int32_t retro_azahar_room_snapshot(az_room_snapshot* out, uint32_t size) {
+     if (!out || size != sizeof(*out)) return 1;
+     try {
+@@ -202,12 +232,13 @@ extern "C" int32_t retro_azahar_room_join(const char* address, uint32_t port,
+         cancel = false;
+         {
+             std::lock_guard lock(snapshot_mutex);
++            host_mode = false;
+             snapshot.state = AZ_ROOM_JOINING;
+             snapshot.error = 0;
+             ClearMembers();
+         }
+         finished = false;
+-        try { worker = std::thread(Run, ip, static_cast<uint16_t>(port), nick, password, console_hash, console_mac); }
++        try { worker = std::thread(Run, ip, static_cast<uint16_t>(port), nick, password, console_hash, console_mac, false); }
+         catch (...) {
+             finished = true;
+             std::lock_guard lock(snapshot_mutex);
+@@ -218,6 +249,41 @@ extern "C" int32_t retro_azahar_room_join(const char* address, uint32_t port,
+         return 0;
+     } catch (...) { return -1; }
+ }
++extern "C" int32_t retro_azahar_room_host(uint32_t port, const char* nickname,
++                                            const char* secret) {
++    try {
++        std::string nick, password;
++        if (port < 1 || port > 65535 || !Bounded(nickname, 20, nick) || nick.size() < 4 ||
++            nick.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._ -")
++                != std::string::npos || !Bounded(secret, 128, password)) return 1;
++        std::lock_guard api_lock(api_mutex);
++        if (!ready) return 2;
++        if (!finished) return 3;
++        if (worker.joinable()) worker.join();
++        cancel = false;
++        {
++            std::lock_guard lock(snapshot_mutex);
++            host_mode = true;
++            snapshot.state = AZ_ROOM_JOINING;
++            snapshot.error = 0;
++            ClearMembers();
++        }
++        finished = false;
++        try {
++            worker = std::thread(Run, "127.0.0.1", static_cast<uint16_t>(port), nick,
++                                 password, console_hash, console_mac, true);
++        } catch (...) {
++            finished = true;
++            std::lock_guard lock(snapshot_mutex);
++            host_mode = false;
++            snapshot.state = AZ_ROOM_IDLE;
++            snapshot.error = 100;
++            return -1;
++        }
++        return 0;
++    } catch (...) { return -1; }
++}
++extern "C" int32_t retro_azahar_room_close() { return retro_azahar_room_leave(); }
+ extern "C" int32_t retro_azahar_room_leave() {
+     try {
+         std::lock_guard api_lock(api_mutex);
+diff --git a/tests/room_bridge/integration.cpp b/tests/room_bridge/integration.cpp
+index 28592b9..78f8285 100644
+--- a/tests/room_bridge/integration.cpp
++++ b/tests/room_bridge/integration.cpp
+@@ -61,7 +61,7 @@ public:
+ };
+ int main() {
+     try {
+-        Check(retro_azahar_room_api_version() == 1, "ABI");
++        Check(retro_azahar_room_api_version() == 2, "ABI");
+         Check(Read().state == AZ_ROOM_OFFLINE, "offline before init");
+         Check(retro_azahar_room_snapshot(nullptr, 0) == 1, "null buffer");
+         Check(retro_azahar_room_join("127.0.0.1", 24872, "test", "") == 2, "not ready");
+@@ -147,6 +147,36 @@ int main() {
+             Check(Read().error == 101, "application handshake timeout");
+         }
+         std::puts("PASS controlled ENet fixtures: wrong-version error and missing JoinSuccess timeout");
++        unsigned host_port = 35200;
++        for (; host_port < 35300; ++host_port) {
++            ENetAddress address{};
++            enet_address_set_host_ip(&address, "127.0.0.1");
++            address.port = static_cast<enet_uint16>(host_port);
++            ENetHost* probe = enet_host_create(&address, 1, 1, 0, 0);
++            if (probe) { enet_host_destroy(probe); break; }
++        }
++        Check(host_port < 35300, "host test port");
++        Check(retro_azahar_room_host(host_port, "iPhoneTest", "secret") == 0, "host accepted");
++        Wait([] { return retro_azahar_room_is_hosting() == 1; });
++        Check(Read().state == AZ_ROOM_JOINED && Read().member_count == 1, "host self join");
++        Check(room->GetState() == Network::Room::State::Open, "host server open");
++        peer.Join("DesktopTest", "second-identity", "127.0.0.1", host_port, 0,
++                  Network::NoPreferredMac, "secret");
++        Wait([&] { return peer.GetState() == Network::RoomMember::State::Joined; });
++        Wait([] { return Read().member_count == 2; });
++        Check(retro_azahar_room_close() == 0, "host close request");
++        Idle();
++        Check(room->GetState() == Network::Room::State::Closed &&
++              retro_azahar_room_is_hosting() == 0 && Read().state == AZ_ROOM_IDLE,
++              "host cleanup");
++        peer.Leave(true);
++        Check(retro_azahar_room_host(host_port, "iPhoneTest", "") == 0, "host recreate");
++        Wait([] { return retro_azahar_room_is_hosting() == 1; });
++        Session::GameStopped();
++        Check(room->GetState() == Network::Room::State::Closed && Read().state == AZ_ROOM_OFFLINE,
++              "stop closes host");
++        Session::GameReady("test-only-console-identity", console_mac);
++        std::puts("PASS host self join, peer join, close, recreate, GameStopped cleanup");
+         for (int i = 0; i < 10; ++i) {
+             Check(retro_azahar_room_join("127.0.0.1", port, "iPhoneTest", "") == 0, "cycle");
+             Session::GameStopped();
